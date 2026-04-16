@@ -2,16 +2,25 @@
 
 from __future__ import annotations
 
+import base64
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import json
 from pathlib import Path
+import threading
 from typing import Any
+from urllib.request import urlopen
 
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 from reverse_detective.models import ActionRecord, Interactable, NPC, SceneState, StoryPremise
 from reverse_detective.scene_loader import load_scene_payload, scene_to_dict
 from reverse_detective.story_loader import build_story_premise, load_story_catalog
+from reverse_detective.utils.assets import (
+    DEFAULT_ASSET_CACHE_ROOT,
+    ensure_asset_parent,
+    resolve_cached_asset_path,
+)
 
 
 PROMPT_SCHEMA = {
@@ -48,6 +57,9 @@ LIVE_WORLD_HEIGHT = 520
 LIVE_WORLD_X_RANGE = (96, LIVE_WORLD_WIDTH - 96)
 LIVE_WORLD_Y_RANGE = (140, LIVE_WORLD_HEIGHT - 68)
 LIVE_NORMALIZED_COORDINATE_MAX = 120
+IMAGE_GENERATION_TIMEOUT_SECONDS = 20.0
+IMAGE_GENERATION_QUALITY = "low"
+IMAGE_OUTPUT_FORMAT = "png"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +70,15 @@ class AIRequestPayload:
     latest_choice: PendingChoice | None
 
 
+@dataclass(frozen=True, slots=True)
+class AssetGenerationRequest:
+    kind: str
+    asset_id: str
+    prompt: str
+    size: str
+    background: str
+
+
 class AIClientError(RuntimeError):
     """Raised when the configured AI provider cannot generate a valid scene."""
 
@@ -65,10 +86,14 @@ class AIClientError(RuntimeError):
 class ReverseDetectiveAIClient:
     """Facade for live OpenAI-compatible requests with a local mock fallback."""
 
-    def __init__(self, config: AIConfig):
+    def __init__(self, config: AIConfig, asset_root: Path | None = None):
         self._config = config
         self._mock_engine = _MockStoryEngine()
         self._api_key = self._load_api_key(config.credentials_path)
+        self._asset_root = (asset_root or DEFAULT_ASSET_CACHE_ROOT).resolve()
+        self._asset_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="rd-assets")
+        self._asset_jobs_lock = threading.Lock()
+        self._pending_asset_jobs: set[tuple[str, str]] = set()
         self._live_enabled = bool(config.base_url and config.model and self._api_key)
         self._last_mode_label = "Live API" if self._live_enabled else "Mock Story"
 
@@ -80,6 +105,15 @@ class ReverseDetectiveAIClient:
     @property
     def mode_label(self) -> str:
         return self._last_mode_label
+
+    def close(self) -> None:
+        self._asset_executor.shutdown(wait=False, cancel_futures=True)
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
 
     def generate_initial_scene(self, premise: StoryPremise) -> SceneState:
         return self._generate_scene(
@@ -140,13 +174,18 @@ class ReverseDetectiveAIClient:
             streamed_scene, response, streamed_text = self._consume_response_stream(stream)
 
         if streamed_scene is not None:
-            return self._normalize_scene_layout(streamed_scene)
+            scene = self._normalize_scene_layout(streamed_scene)
+            self._schedule_scene_assets(request.premise, scene)
+            return scene
 
         raw_content = self._extract_response_content(response, streamed_text)
         try:
-            return self._normalize_scene_layout(load_scene_payload(raw_content))
+            scene = self._normalize_scene_layout(load_scene_payload(raw_content))
         except Exception as exc:
             raise AIClientError(f"Live AI returned invalid scene JSON: {exc}") from exc
+
+        self._schedule_scene_assets(request.premise, scene)
+        return scene
 
     def _build_system_prompt(self) -> str:
         schema_text = json.dumps(PROMPT_SCHEMA, ensure_ascii=False, indent=2)
@@ -164,8 +203,10 @@ class ReverseDetectiveAIClient:
             f"4. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
             "5. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
             "6. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "7. narrative must describe the current situation and risk.\n"
-            "8. All visible text content must be Simplified Chinese.\n"
+            "7. background_image and every image field must be stable reusable asset IDs ending in .png, using short lowercase ASCII with underscores.\n"
+            "8. Reuse the same asset ID across turns when the same room, NPC, or item is still visually the same. Use a new asset ID only when the visual subject changes.\n"
+            "9. narrative must describe the current situation and risk.\n"
+            "10. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
@@ -179,6 +220,10 @@ class ReverseDetectiveAIClient:
                 "distribution_rule": (
                     "Spread NPCs and interactables across the room. "
                     "Do not cluster every entity into the top-left corner or a tiny area."
+                ),
+                "asset_id_rule": (
+                    "background_image and every image field are reusable asset IDs, not local file paths. "
+                    "Keep them short, lowercase, descriptive, ASCII-only, and ending in .png."
                 ),
             },
             "premise": _premise_to_dict(request.premise),
@@ -338,6 +383,349 @@ class ReverseDetectiveAIClient:
         scaled_y = LIVE_WORLD_Y_RANGE[0] + y_ratio * (LIVE_WORLD_Y_RANGE[1] - LIVE_WORLD_Y_RANGE[0])
         return int(round(scaled_x)), int(round(scaled_y))
 
+    def _schedule_scene_assets(self, premise: StoryPremise, scene: SceneState) -> None:
+        for asset_request in self._build_asset_requests(premise, scene):
+            cache_path = resolve_cached_asset_path(
+                asset_request.kind,
+                asset_request.asset_id,
+                self._asset_root,
+            )
+            if cache_path is None or cache_path.exists():
+                continue
+
+            asset_key = (asset_request.kind, asset_request.asset_id)
+            with self._asset_jobs_lock:
+                if asset_key in self._pending_asset_jobs:
+                    continue
+                self._pending_asset_jobs.add(asset_key)
+
+            self._asset_executor.submit(self._generate_scene_asset, asset_request)
+
+    def _build_asset_requests(
+        self,
+        premise: StoryPremise,
+        scene: SceneState,
+    ) -> list[AssetGenerationRequest]:
+        requests = [
+            AssetGenerationRequest(
+                kind="background",
+                asset_id=scene.scene.background_image,
+                prompt=self._build_background_asset_prompt(premise, scene),
+                size="1536x1024",
+                background="opaque",
+            )
+        ]
+
+        requests.extend(
+            AssetGenerationRequest(
+                kind="npc",
+                asset_id=npc.image,
+                prompt=self._build_npc_asset_prompt(premise, scene, npc),
+                size="1024x1024",
+                background="transparent",
+            )
+            for npc in scene.npcs
+        )
+        requests.extend(
+            AssetGenerationRequest(
+                kind="interactable",
+                asset_id=interactable.image,
+                prompt=self._build_interactable_asset_prompt(premise, scene, interactable),
+                size="1024x1024",
+                background="transparent",
+            )
+            for interactable in scene.interactables
+        )
+        return requests
+
+    def _generate_scene_asset(self, asset_request: AssetGenerationRequest) -> None:
+        asset_key = (asset_request.kind, asset_request.asset_id)
+        try:
+            cache_path = resolve_cached_asset_path(
+                asset_request.kind,
+                asset_request.asset_id,
+                self._asset_root,
+            )
+            if cache_path is None or cache_path.exists():
+                return
+
+            image_bytes = self._request_generated_image_bytes(asset_request)
+            ensure_asset_parent(cache_path).write_bytes(image_bytes)
+        except Exception:
+            return
+        finally:
+            with self._asset_jobs_lock:
+                self._pending_asset_jobs.discard(asset_key)
+
+    def _request_generated_image_bytes(self, asset_request: AssetGenerationRequest) -> bytes:
+        response_tool_error: Exception | None = None
+        try:
+            return self._request_image_bytes_from_responses_tool(asset_request)
+        except Exception as exc:
+            response_tool_error = exc
+
+        image_api_error: Exception | None = None
+        try:
+            return self._request_image_bytes_from_images_api(asset_request)
+        except Exception as exc:
+            image_api_error = exc
+
+        if response_tool_error is not None and image_api_error is not None:
+            raise AIClientError(
+                "Image generation failed via responses tool and images API: "
+                f"{response_tool_error}; fallback: {image_api_error}"
+            ) from image_api_error
+        if response_tool_error is not None:
+            raise AIClientError(f"Image generation failed: {response_tool_error}") from response_tool_error
+        if image_api_error is not None:
+            raise AIClientError(f"Image generation failed: {image_api_error}") from image_api_error
+        raise AIClientError("Image generation response did not contain an image payload.")
+
+    def _request_image_bytes_from_responses_tool(
+        self,
+        asset_request: AssetGenerationRequest,
+    ) -> bytes:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=self._api_key,
+            base_url=self._config.base_url,
+            timeout=min(self._config.timeout_seconds, IMAGE_GENERATION_TIMEOUT_SECONDS),
+        )
+
+        tools_attempts = (
+            {
+                "tools": [
+                    {
+                        "type": "image_generation",
+                        "model": self._config.image_model,
+                        "background": asset_request.background,
+                        "quality": IMAGE_GENERATION_QUALITY,
+                        "size": asset_request.size,
+                        "output_format": IMAGE_OUTPUT_FORMAT,
+                    }
+                ],
+                "tool_choice": {"type": "image_generation"},
+            },
+            {
+                "tools": [
+                    {
+                        "type": "image_generation",
+                        "background": asset_request.background,
+                        "quality": IMAGE_GENERATION_QUALITY,
+                        "size": asset_request.size,
+                        "output_format": IMAGE_OUTPUT_FORMAT,
+                    }
+                ],
+                "tool_choice": {"type": "image_generation"},
+            },
+            {
+                "tools": [{"type": "image_generation"}],
+            },
+        )
+
+        last_error: Exception | None = None
+        for attempt_kwargs in tools_attempts:
+            try:
+                with client.responses.stream(
+                    model=self._config.model,
+                    input=[
+                        {
+                            "type": "message",
+                            "role": "user",
+                            "content": asset_request.prompt,
+                        }
+                    ],
+                    store=not self._config.disable_response_storage,
+                    **attempt_kwargs,
+                ) as stream:
+                    return self._consume_image_generation_stream(stream)
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if last_error is not None:
+            raise AIClientError(f"Responses image tool failed: {last_error}") from last_error
+        raise AIClientError("Responses image tool did not return an image.")
+
+    def _request_image_bytes_from_images_api(self, asset_request: AssetGenerationRequest) -> bytes:
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=self._api_key,
+            base_url=self._config.base_url,
+            timeout=min(self._config.timeout_seconds, IMAGE_GENERATION_TIMEOUT_SECONDS),
+        )
+        base_kwargs = {
+            "model": self._config.image_model,
+            "prompt": asset_request.prompt,
+            "size": asset_request.size,
+        }
+        attempts = (
+            {
+                "background": asset_request.background,
+                "quality": IMAGE_GENERATION_QUALITY,
+                "output_format": IMAGE_OUTPUT_FORMAT,
+                "response_format": "b64_json",
+            },
+            {
+                "background": asset_request.background,
+                "quality": IMAGE_GENERATION_QUALITY,
+                "output_format": IMAGE_OUTPUT_FORMAT,
+                "response_format": "url",
+            },
+            {
+                "output_format": IMAGE_OUTPUT_FORMAT,
+                "response_format": "b64_json",
+            },
+            {
+                "response_format": "url",
+            },
+        )
+
+        last_error: Exception | None = None
+        for attempt_kwargs in attempts:
+            try:
+                response = client.images.generate(**base_kwargs, **attempt_kwargs)
+                image_data = self._extract_generated_image_data(response)
+                b64_payload = self._read_image_field(image_data, "b64_json")
+                if b64_payload:
+                    return base64.b64decode(b64_payload)
+
+                image_url = self._read_image_field(image_data, "url")
+                if image_url:
+                    return self._download_binary(image_url)
+            except Exception as exc:
+                last_error = exc
+                continue
+
+        if last_error is not None:
+            raise AIClientError(f"Images API failed: {last_error}") from last_error
+        raise AIClientError("Images API response did not contain an image payload.")
+
+    def _consume_image_generation_stream(self, stream: Any) -> bytes:
+        response: Any = None
+        for event in stream:
+            event_type = getattr(event, "type", None)
+            if event_type == "response.output_item.done":
+                image_bytes = self._extract_image_bytes_from_output_item(getattr(event, "item", None))
+                if image_bytes is not None:
+                    return image_bytes
+                continue
+
+            if event_type == "response.completed":
+                response = getattr(event, "response", None)
+
+        image_bytes = self._extract_image_bytes_from_response(response)
+        if image_bytes is not None:
+            return image_bytes
+        raise AIClientError("Responses image tool stream did not return an image.")
+
+    def _extract_image_bytes_from_response(self, response: Any) -> bytes | None:
+        output_items = getattr(response, "output", None)
+        if isinstance(output_items, list):
+            for item in output_items:
+                image_bytes = self._extract_image_bytes_from_output_item(item)
+                if image_bytes is not None:
+                    return image_bytes
+        return None
+
+    def _extract_image_bytes_from_output_item(self, item: Any) -> bytes | None:
+        if item is None:
+            return None
+
+        item_type = item.get("type") if isinstance(item, dict) else getattr(item, "type", None)
+        if item_type != "image_generation_call":
+            return None
+
+        raw_result = item.get("result") if isinstance(item, dict) else getattr(item, "result", None)
+        if isinstance(raw_result, str) and raw_result.strip():
+            return base64.b64decode(raw_result)
+        return None
+
+    def _extract_generated_image_data(self, response: Any) -> Any:
+        data = getattr(response, "data", None)
+        if isinstance(data, list) and data:
+            return data[0]
+
+        if isinstance(response, dict):
+            raw_data = response.get("data")
+            if isinstance(raw_data, list) and raw_data:
+                return raw_data[0]
+
+        raise AIClientError("Image generation response did not contain image data.")
+
+    def _read_image_field(self, image_data: Any, field_name: str) -> str:
+        if isinstance(image_data, dict):
+            value = image_data.get(field_name)
+        else:
+            value = getattr(image_data, field_name, None)
+        if isinstance(value, str):
+            return value.strip()
+        return ""
+
+    def _download_binary(self, url: str) -> bytes:
+        with urlopen(
+            url,
+            timeout=min(self._config.timeout_seconds, IMAGE_GENERATION_TIMEOUT_SECONDS),
+        ) as response:
+            payload = response.read()
+        if not isinstance(payload, bytes) or not payload:
+            raise AIClientError("Downloaded image payload was empty.")
+        return payload
+
+    def _build_background_asset_prompt(self, premise: StoryPremise, scene: SceneState) -> str:
+        return (
+            "Create a 2.5D mystery game background illustration. "
+            "Stylized semi-realistic digital painting, cinematic lighting, no text, no UI, no watermark. "
+            f"Asset ID: {scene.scene.background_image}. "
+            f"Story title: {premise.story_title}. "
+            f"Setting: {premise.setting}. "
+            f"Scene description: {scene.scene.description}. "
+            "Leave clear open floor space for player movement in the middle and foreground. "
+            "Interior composition for a suspenseful detective simulation."
+        )
+
+    def _build_npc_asset_prompt(
+        self,
+        premise: StoryPremise,
+        scene: SceneState,
+        npc: NPC,
+    ) -> str:
+        role_hint = "supporting character"
+        if npc.name == premise.detective_name:
+            role_hint = f"detective, identity: {premise.detective_identity}"
+        elif npc.name == premise.victim_name:
+            role_hint = f"victim, identity: {premise.victim_identity}"
+
+        return (
+            "Create a full-body game character sprite for a 2.5D mystery game. "
+            "Transparent background, centered subject, readable silhouette, no text, no watermark. "
+            f"Asset ID: {npc.image}. "
+            f"Character name: {npc.name}. "
+            f"Role: {role_hint}. "
+            f"Story title: {premise.story_title}. "
+            f"Scene location: {scene.scene.description}. "
+            "Stylized semi-realistic illustration suitable for compositing into a side-view scene."
+        )
+
+    def _build_interactable_asset_prompt(
+        self,
+        premise: StoryPremise,
+        scene: SceneState,
+        interactable: Interactable,
+    ) -> str:
+        return (
+            "Create a prop sprite for a 2.5D mystery game. "
+            "Transparent background, isolated object, no text, no watermark, readable at small size. "
+            f"Asset ID: {interactable.image}. "
+            f"Object name: {interactable.name}. "
+            f"Story title: {premise.story_title}. "
+            f"Scene location: {scene.scene.description}. "
+            f"Setting: {premise.setting}. "
+            "Stylized semi-realistic illustration for an interactive clue object."
+        )
+
     def _load_api_key(self, credentials_path: Path) -> str | None:
         if not credentials_path.exists():
             return None
@@ -354,6 +742,7 @@ class ReverseDetectiveAIClient:
         candidate_keys = [
             "api_key",
             "crs_api_key",
+            "OPENAI_API_KEY",
             self._config.provider,
             f"{self._config.provider}_api_key",
         ]

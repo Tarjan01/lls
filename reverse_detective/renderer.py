@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
+from pathlib import Path
 from typing import Any
 
 import pygame
 
 from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import Interactable, NPC, SceneState
+from reverse_detective.utils.assets import DEFAULT_ASSET_CACHE_ROOT, resolve_cached_asset_path
 from reverse_detective.utils.text import clamp_lines, wrap_text
 
 
@@ -62,12 +64,21 @@ class PlaceholderAssetResolver:
 class Renderer:
     """Pygame renderer for the current scene and UI overlays."""
 
-    def __init__(self, surface: pygame.Surface, width: int, height: int, play_area_height: int):
+    def __init__(
+        self,
+        surface: pygame.Surface,
+        width: int,
+        height: int,
+        play_area_height: int,
+        asset_root: Path | None = None,
+    ):
         self._surface = surface
         self._width = width
         self._height = height
         self._play_area_height = play_area_height
         self._hud_top = play_area_height
+        self._asset_root = (asset_root or DEFAULT_ASSET_CACHE_ROOT).resolve()
+        self._image_cache: dict[tuple[str, tuple[int, int]], pygame.Surface] = {}
         self._resolver = PlaceholderAssetResolver()
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28)
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
@@ -101,6 +112,18 @@ class Renderer:
         pygame.display.flip()
 
     def _draw_background(self, scene: SceneState) -> None:
+        background_surface = self._load_asset_surface(
+            "background",
+            scene.scene.background_image,
+            (self._width, self._play_area_height),
+        )
+        if background_surface is not None:
+            self._surface.blit(background_surface, (0, 0))
+            vignette = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
+            vignette.fill((8, 12, 18, 26))
+            self._surface.blit(vignette, (0, 0))
+            return
+
         top_color, mid_color, floor_color = self._resolver.resolve_background(
             scene.scene.background_image
         )
@@ -134,9 +157,16 @@ class Renderer:
         style = self._resolver.resolve_npc_style(npc.id)
         x, y = self._resolve_npc_position(npc, elapsed_seconds)
         shadow_rect = pygame.Rect(x - 30, y + 58, 60, 18)
-        body_rect = pygame.Rect(x - 28, y - 72, 56, 108)
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
+        sprite = self._load_asset_surface("npc", npc.image, (132, 132))
+        if sprite is not None:
+            sprite_rect = sprite.get_rect(midbottom=(x, y + 42))
+            self._surface.blit(sprite, sprite_rect)
+            self._draw_label(npc.name, (x, sprite_rect.y - 26), style.text)
+            return
+
+        body_rect = pygame.Rect(x - 28, y - 72, 56, 108)
         pygame.draw.rect(self._surface, style.fill, body_rect, border_radius=18)
         pygame.draw.rect(self._surface, style.outline, body_rect, width=3, border_radius=18)
         pygame.draw.circle(self._surface, style.fill, (x, y - 92), 24)
@@ -146,7 +176,6 @@ class Renderer:
     def _draw_interactable(self, interactable: Interactable, active: bool) -> None:
         style = self._resolver.resolve_interactable_style(interactable.id)
         x, y = interactable.position
-        rect = pygame.Rect(x - 28, y - 28, 56, 56)
         shadow_rect = pygame.Rect(x - 24, y + 18, 48, 14)
 
         if active:
@@ -156,6 +185,14 @@ class Renderer:
             self._surface.blit(glow_surface, (x - 48, y - 48))
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
+        sprite = self._load_asset_surface("interactable", interactable.image, (82, 82))
+        if sprite is not None:
+            sprite_rect = sprite.get_rect(midbottom=(x, y + 30))
+            self._surface.blit(sprite, sprite_rect)
+            self._draw_label(interactable.name, (x, sprite_rect.y - 18), style.text)
+            return
+
+        rect = pygame.Rect(x - 28, y - 28, 56, 56)
         pygame.draw.rect(self._surface, style.fill, rect, border_radius=14)
         pygame.draw.rect(self._surface, style.outline, rect, width=3, border_radius=14)
         self._draw_label(interactable.name, (x, y - 44), style.text)
@@ -271,6 +308,35 @@ class Renderer:
         pygame.draw.rect(self._surface, (255, 196, 184), banner_rect, width=2, border_radius=12)
         text = self._small_font.render(message, True, (255, 242, 236))
         self._surface.blit(text, (banner_rect.x + 14, banner_rect.y + 13))
+
+    def _load_asset_surface(
+        self,
+        asset_kind: str,
+        asset_ref: str,
+        size: tuple[int, int],
+    ) -> pygame.Surface | None:
+        asset_path = resolve_cached_asset_path(asset_kind, asset_ref, self._asset_root)
+        if asset_path is None or not asset_path.is_file():
+            return None
+
+        cache_key = (str(asset_path), size)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            loaded = pygame.image.load(str(asset_path))
+            if loaded.get_alpha() is not None:
+                loaded = loaded.convert_alpha()
+            else:
+                loaded = loaded.convert()
+            if loaded.get_size() != size:
+                loaded = pygame.transform.smoothscale(loaded, size)
+        except Exception:
+            return None
+
+        self._image_cache[cache_key] = loaded
+        return loaded
 
     def _resolve_npc_position(self, npc: NPC, elapsed_seconds: float) -> tuple[int, int]:
         if not npc.patrol:

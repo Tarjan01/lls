@@ -8,6 +8,7 @@ fps = 60
 provider = "crs"
 base_url = "https://apikey.soxio.me/openai"
 model = "gpt-5.4"
+image_model = "gpt-image-1"
 reasoning_effort = "xhigh"
 timeout_seconds = 120
 disable_response_storage = true

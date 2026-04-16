@@ -42,6 +42,7 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("base_url", "请求 Base URL", "text"),
     ("api_key", "API Key", "secret"),
     ("model", "模型名称", "text"),
+    ("image_model", "图片模型", "text"),
     ("reasoning_effort", "推理强度", "text"),
     ("timeout_seconds", "超时秒数", "float"),
     ("disable_response_storage", "禁用响应存储", "bool"),
@@ -82,6 +83,7 @@ class SettingsDraft:
     base_url: str
     api_key: str
     model: str
+    image_model: str
     reasoning_effort: str
     timeout_seconds: float
     disable_response_storage: bool
@@ -96,6 +98,7 @@ class SettingsDraft:
             base_url=config.ai.base_url,
             api_key=api_key,
             model=config.ai.model,
+            image_model=config.ai.image_model,
             reasoning_effort=config.ai.reasoning_effort,
             timeout_seconds=config.ai.timeout_seconds,
             disable_response_storage=config.ai.disable_response_storage,
@@ -115,6 +118,7 @@ class SettingsDraft:
                 provider=current_config.ai.provider,
                 base_url=self.base_url.strip(),
                 model=self.model.strip(),
+                image_model=self.image_model.strip() or "gpt-image-1",
                 reasoning_effort=self.reasoning_effort.strip() or "high",
                 timeout_seconds=self.timeout_seconds,
                 disable_response_storage=self.disable_response_storage,
@@ -181,6 +185,7 @@ class GameApp:
                 self._update_active_interactable()
                 self._draw()
         finally:
+            self._ai_client.close()
             pygame.quit()
 
     def _handle_events(self) -> None:
@@ -679,6 +684,10 @@ class GameApp:
                 value = raw_value.strip()
                 if not value:
                     raise ValueError("模型名称不能为空。")
+            elif field_name == "image_model":
+                value = raw_value.strip()
+                if not value:
+                    raise ValueError("图片模型不能为空。")
             elif field_name == "reasoning_effort":
                 value = raw_value.strip().lower()
                 valid_efforts = {"none", "minimal", "low", "medium", "high", "xhigh"}
@@ -715,6 +724,9 @@ class GameApp:
         if not candidate.ai.model:
             self._status_text = "模型名称不能为空。"
             return
+        if not candidate.ai.image_model:
+            self._status_text = "图片模型不能为空。"
+            return
         if candidate.ai.reasoning_effort not in {"none", "minimal", "low", "medium", "high", "xhigh"}:
             self._status_text = "推理强度必须是 none/minimal/low/medium/high/xhigh。"
             return
@@ -739,6 +751,7 @@ class GameApp:
         self._config = candidate
         pygame.display.set_caption(candidate.display.title)
         self._settings_draft = SettingsDraft.from_config(candidate, api_key)
+        self._ai_client.close()
         self._ai_client = self._build_ai_client(candidate.ai)
         if self._status_text is None or "AI 配置不可用" not in self._status_text:
             self._status_text = "设置已保存。"
@@ -773,6 +786,7 @@ class GameApp:
                 provider=ai_config.provider,
                 base_url=ai_config.base_url,
                 model=ai_config.model,
+                image_model=ai_config.image_model,
                 reasoning_effort=ai_config.reasoning_effort,
                 timeout_seconds=ai_config.timeout_seconds,
                 disable_response_storage=ai_config.disable_response_storage,

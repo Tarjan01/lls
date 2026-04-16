@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import pytest
 
 from reverse_detective.ai_client import (
     AIRequestPayload,
+    AssetGenerationRequest,
     ReverseDetectiveAIClient,
     build_default_premise,
 )
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
+from reverse_detective.utils.assets import resolve_cached_asset_path
 
 
 def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
@@ -19,6 +22,7 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-4.1-mini",
+            image_model="gpt-image-1",
             reasoning_effort="high",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -41,6 +45,7 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-4.1-mini",
+            image_model="gpt-image-1",
             reasoning_effort="high",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -80,6 +85,7 @@ def test_extract_response_content_reads_output_text(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -101,6 +107,7 @@ def test_extract_response_content_prefers_streamed_text(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -122,6 +129,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
             provider="crs",
             base_url="https://apikey.soxio.me/openai",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -204,6 +212,7 @@ def test_live_scene_uses_streaming_responses_api(
             provider="crs",
             base_url="https://apikey.soxio.me/openai",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -213,14 +222,17 @@ def test_live_scene_uses_streaming_responses_api(
         )
     )
 
-    scene = client.generate_initial_scene(build_default_premise())
+    try:
+        scene = client.generate_initial_scene(build_default_premise())
 
-    assert scene.game_status == "ongoing"
-    assert scene.interactables[0].options[0].action_id == "inspect"
-    assert captured["model"] == "gpt-5.4"
-    assert captured["store"] is False
-    assert captured["reasoning"] == {"effort": "xhigh"}
-    assert isinstance(captured["input"], list)
+        assert scene.game_status == "ongoing"
+        assert scene.interactables[0].options[0].action_id == "inspect"
+        assert captured["model"] == "gpt-5.4"
+        assert captured["store"] is False
+        assert captured["reasoning"] == {"effort": "xhigh"}
+        assert isinstance(captured["input"], list)
+    finally:
+        client.close()
 
 
 def test_live_scene_returns_early_when_streamed_json_is_complete(
@@ -274,6 +286,7 @@ def test_live_scene_returns_early_when_streamed_json_is_complete(
             provider="crs",
             base_url="https://apikey.soxio.me/openai",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -283,10 +296,13 @@ def test_live_scene_returns_early_when_streamed_json_is_complete(
         )
     )
 
-    scene = client.generate_initial_scene(build_default_premise())
+    try:
+        scene = client.generate_initial_scene(build_default_premise())
 
-    assert scene.interactables[0].position == (640, 260)
-    assert call_state["final_called"] is False
+        assert scene.interactables[0].position == (640, 260)
+        assert call_state["final_called"] is False
+    finally:
+        client.close()
 
 
 def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
@@ -339,6 +355,7 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
             provider="crs",
             base_url="https://apikey.soxio.me/openai",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -348,11 +365,14 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
         )
     )
 
-    scene = client.generate_initial_scene(build_default_premise())
+    try:
+        scene = client.generate_initial_scene(build_default_premise())
 
-    assert scene.npcs[0].position == (509, 371)
-    assert scene.npcs[0].patrol == ((509, 371), (662, 358), (749, 383))
-    assert scene.interactables[0].position == (988, 340)
+        assert scene.npcs[0].position == (509, 371)
+        assert scene.npcs[0].patrol == ((509, 371), (662, 358), (749, 383))
+        assert scene.interactables[0].position == (988, 340)
+    finally:
+        client.close()
 
 
 def test_consume_response_stream_does_not_require_response_completed(
@@ -364,6 +384,7 @@ def test_consume_response_stream_does_not_require_response_completed(
             provider="crs",
             base_url="https://apikey.soxio.me/openai",
             model="gpt-5.4",
+            image_model="gpt-image-1",
             reasoning_effort="xhigh",
             timeout_seconds=30,
             disable_response_storage=True,
@@ -394,3 +415,131 @@ def test_consume_response_stream_does_not_require_response_completed(
     assert streamed_scene is None
     assert response is None
     assert streamed_text == '{"scene": {"description": "partial"}}'
+
+
+def test_generate_scene_asset_writes_cached_image(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    class FakeImageData:
+        b64_json = base64.b64encode(b"fake-image-bytes").decode("ascii")
+        url = None
+
+    class FakeImageResponse:
+        data = [FakeImageData()]
+
+    class FakeImages:
+        def generate(self, **kwargs):
+            captured.update(kwargs)
+            return FakeImageResponse()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            captured["client_kwargs"] = kwargs
+            self.images = FakeImages()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+
+    asset_root = tmp_path / "assets"
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            image_model="gpt-image-1",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        ),
+        asset_root=asset_root,
+    )
+
+    request = AssetGenerationRequest(
+        kind="background",
+        asset_id="bg_test_case.png",
+        prompt="test prompt",
+        size="1536x1024",
+        background="opaque",
+    )
+
+    try:
+        client._generate_scene_asset(request)
+
+        cached_path = resolve_cached_asset_path("background", request.asset_id, asset_root)
+        assert cached_path is not None
+        assert cached_path.read_bytes() == b"fake-image-bytes"
+        assert captured["model"] == "gpt-image-1"
+        assert captured["response_format"] == "b64_json"
+        assert captured["background"] == "opaque"
+    finally:
+        client.close()
+
+
+def test_request_generated_image_bytes_prefers_responses_image_tool(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+
+    class FakeEvent:
+        type = "response.output_item.done"
+
+        def __init__(self, payload: str):
+            self.item = {"type": "image_generation_call", "result": payload}
+
+    class FakeStream:
+        def __enter__(self) -> "FakeStream":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def __iter__(self):
+            yield FakeEvent(base64.b64encode(b"tool-image").decode("ascii"))
+
+    class FakeResponses:
+        def stream(self, **kwargs):
+            return FakeStream()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            image_model="gpt-image-1",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        )
+    )
+
+    request = AssetGenerationRequest(
+        kind="background",
+        asset_id="bg_test_case.png",
+        prompt="test prompt",
+        size="1536x1024",
+        background="opaque",
+    )
+
+    try:
+        assert client._request_generated_image_bytes(request) == b"tool-image"
+    finally:
+        client.close()

@@ -26,6 +26,7 @@ class AIConfig:
     provider: str
     base_url: str
     model: str
+    image_model: str
     reasoning_effort: str
     timeout_seconds: float
     disable_response_storage: bool
@@ -58,6 +59,8 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             provider=str(ai_data.get("provider", "crs")),
             base_url=str(ai_data.get("base_url", "")).strip(),
             model=str(ai_data.get("model", "gpt-4.1-mini")),
+            image_model=str(ai_data.get("image_model", "gpt-image-1")).strip()
+            or "gpt-image-1",
             reasoning_effort=str(ai_data.get("reasoning_effort", "high")).strip() or "high",
             timeout_seconds=float(ai_data.get("timeout_seconds", 30)),
             disable_response_storage=bool(ai_data.get("disable_response_storage", True)),
@@ -87,6 +90,7 @@ def load_api_key(credentials_path: Path, provider: str) -> str:
     candidate_keys = [
         "api_key",
         "crs_api_key",
+        "OPENAI_API_KEY",
         provider,
         f"{provider}_api_key",
     ]
@@ -114,6 +118,7 @@ def save_config(config: AppConfig, config_path: Path | None = None) -> None:
             f"provider = {_toml_quote(config.ai.provider)}",
             f"base_url = {_toml_quote(config.ai.base_url)}",
             f"model = {_toml_quote(config.ai.model)}",
+            f"image_model = {_toml_quote(config.ai.image_model)}",
             f"reasoning_effort = {_toml_quote(config.ai.reasoning_effort)}",
             f"timeout_seconds = {config.ai.timeout_seconds}",
             f"disable_response_storage = {_toml_bool(config.ai.disable_response_storage)}",
@@ -143,10 +148,11 @@ def save_api_key(credentials_path: Path, provider: str, api_key: str) -> None:
     if cleaned:
         existing["api_key"] = cleaned
         existing["crs_api_key"] = cleaned
+        existing["OPENAI_API_KEY"] = cleaned
         existing[provider] = cleaned
         existing[f"{provider}_api_key"] = cleaned
     else:
-        for key in ("api_key", "crs_api_key", provider, f"{provider}_api_key"):
+        for key in ("api_key", "crs_api_key", "OPENAI_API_KEY", provider, f"{provider}_api_key"):
             existing.pop(key, None)
 
     credentials_path.write_text(
