@@ -344,6 +344,14 @@ class GameApp:
             self._submit_settlement_request()
             return
 
+        if self._session.loading:
+            if key in (pygame.K_LEFT, pygame.K_PAGEUP):
+                self._session.browse_text_history(-1)
+                return
+            if key in (pygame.K_RIGHT, pygame.K_PAGEDOWN):
+                self._session.browse_text_history(1)
+                return
+
         if self._session.loading or self._session.current_scene.is_terminal or self._session.needs_settlement:
             return
 
@@ -507,7 +515,10 @@ class GameApp:
         scene_snapshot = self._session.current_scene
         premise_snapshot = self._premise
         if request_type == "forced_immediate_choice":
-            self._session.local_message = "关键行动已触发，AI 正在立即裁决本轮走向。"
+            loading_hint = "关键行动已触发，AI 正在立即裁决本轮走向。"
+            self._session.local_message = loading_hint
+            latest_turn = round_actions_snapshot[-1].turn_index if round_actions_snapshot else None
+            self._session.record_system_text("即时裁决", loading_hint, turn_index=latest_turn)
         self._session.begin_settlement()
         worker = threading.Thread(
             target=self._run_settlement_request,

@@ -100,6 +100,10 @@ def test_game_state_applies_local_logic_and_hides_invalid_options() -> None:
     session = GameSessionState.create(build_default_premise())
     session.finish_initial_scene(_build_local_logic_scene())
 
+    assert len(session.text_history) == 1
+    assert session.selected_text_history is not None
+    assert session.selected_text_history.title.startswith("开局场景")
+
     session.set_active_interactable("study_door")
     choice = session.choose_option_by_index(0)
     assert choice is not None
@@ -110,6 +114,8 @@ def test_game_state_applies_local_logic_and_hides_invalid_options() -> None:
     assert resolution.should_settle is False
     assert session.remaining_action_points == 4
     assert session.current_scene.interactables[0].state.locked is False
+    assert session.selected_text_history is not None
+    assert session.selected_text_history.body == "门锁被你悄悄解开。"
 
     session.set_active_interactable("study_door")
     options = session.available_options_for(session.active_interactable)  # type: ignore[arg-type]
@@ -147,6 +153,9 @@ def test_finish_settlement_moves_round_actions_into_history() -> None:
     assert len(session.round_actions) == 0
     assert len(session.settled_action_history) == 1
     assert session.remaining_action_points == session.action_points_per_round
+    assert session.selected_text_history is not None
+    assert session.selected_text_history.title.startswith("回合结算")
+    assert "测试本地交互与行动点。" in session.selected_text_history.body
 
 
 def test_game_state_immediate_ai_option_forces_early_settlement() -> None:
@@ -164,3 +173,21 @@ def test_game_state_immediate_ai_option_forces_early_settlement() -> None:
     assert resolution.should_settle is True
     assert session.remaining_action_points == 4
     assert session.round_actions[-1].resolution_mode == "immediate_ai"
+
+
+def test_game_state_can_browse_text_history() -> None:
+    session = GameSessionState.create(build_default_premise())
+    scene = _build_local_logic_scene()
+    session.finish_initial_scene(scene)
+    session.record_system_text("系统提示", "正在等待后续结算。")
+
+    assert session.selected_text_history is not None
+    assert session.selected_text_history.title == "系统提示"
+
+    session.browse_text_history(-1)
+    assert session.selected_text_history is not None
+    assert session.selected_text_history.title.startswith("开局场景")
+
+    window = session.text_history_window(5)
+    assert len(window) == 2
+    assert window[-1][1].title == "系统提示"

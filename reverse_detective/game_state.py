@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from reverse_detective.local_logic import (
     apply_local_action,
@@ -48,12 +49,25 @@ class ChoiceResolution:
     requires_immediate_ai: bool = False
 
 
+TextHistoryKind = Literal["scene", "local", "system", "error"]
+
+
+@dataclass(frozen=True, slots=True)
+class TextHistoryEntry:
+    title: str
+    body: str
+    kind: TextHistoryKind
+    turn_index: int | None = None
+
+
 @dataclass(slots=True)
 class GameSessionState:
     premise: StoryPremise
     current_scene: SceneState = field(default_factory=build_loading_scene)
     settled_action_history: list[ActionRecord] = field(default_factory=list)
     round_actions: list[ActionRecord] = field(default_factory=list)
+    text_history: list[TextHistoryEntry] = field(default_factory=list)
+    selected_text_history_index: int = 0
     player_position: tuple[float, float] = (140.0, 500.0)
     active_interactable_id: str | None = None
     selected_option_index: int = 0
@@ -89,10 +103,19 @@ class GameSessionState:
     def can_force_settle(self) -> bool:
         return bool(self.round_actions) and not self.loading
 
+    @property
+    def selected_text_history(self) -> TextHistoryEntry | None:
+        if not self.text_history:
+            return None
+        index = min(max(self.selected_text_history_index, 0), len(self.text_history) - 1)
+        return self.text_history[index]
+
     def reset_for_restart(self) -> None:
         self.current_scene = build_loading_scene()
         self.settled_action_history.clear()
         self.round_actions.clear()
+        self.text_history.clear()
+        self.selected_text_history_index = 0
         self.player_position = (140.0, 500.0)
         self.active_interactable_id = None
         self.selected_option_index = 0
@@ -157,6 +180,26 @@ class GameSessionState:
     def available_options_for(self, interactable: Interactable) -> tuple[ActionOption, ...]:
         return available_options(interactable)
 
+    def browse_text_history(self, direction: int) -> None:
+        if not self.text_history:
+            return
+        self.selected_text_history_index = (
+            self.selected_text_history_index + direction
+        ) % len(self.text_history)
+
+    def text_history_window(self, limit: int = 5) -> list[tuple[int, TextHistoryEntry]]:
+        if not self.text_history or limit <= 0:
+            return []
+
+        half_window = max(0, limit // 2)
+        start = max(0, self.selected_text_history_index - half_window)
+        end = min(len(self.text_history), start + limit)
+        start = max(0, end - limit)
+        return [(index, self.text_history[index]) for index in range(start, end)]
+
+    def record_system_text(self, title: str, body: str, *, turn_index: int | None = None) -> None:
+        self._append_text_history(title, body, kind="system", turn_index=turn_index)
+
     def begin_initial_load(self) -> None:
         self.loading = True
         self.error_message = None
@@ -176,6 +219,12 @@ class GameSessionState:
             self.round_actions.append(record)
             self.remaining_action_points = max(0, self.remaining_action_points - 1)
             self.local_message = f"未能找到交互目标：{choice.interactable_name}"
+            self._append_text_history(
+                f"行动 {record.turn_index} · {record.label}",
+                self.local_message,
+                kind="error",
+                turn_index=record.turn_index,
+            )
             self.selected_option_index = 0
             self.active_interactable_id = None
             return ChoiceResolution(
@@ -197,6 +246,12 @@ class GameSessionState:
             self.round_actions.append(record)
             self.remaining_action_points = max(0, self.remaining_action_points - 1)
             self.local_message = f"当前无法执行“{choice.label}”。"
+            self._append_text_history(
+                f"行动 {record.turn_index} · {record.label}",
+                self.local_message,
+                kind="error",
+                turn_index=record.turn_index,
+            )
             self.selected_option_index = 0
             self.active_interactable_id = None
             return ChoiceResolution(
@@ -212,6 +267,13 @@ class GameSessionState:
         self.remaining_action_points = max(0, self.remaining_action_points - 1)
         self.local_message = outcome.message
         self.error_message = None
+        if outcome.message:
+            self._append_text_history(
+                f"行动 {record.turn_index} · {record.label}",
+                outcome.message,
+                kind="local",
+                turn_index=record.turn_index,
+            )
         self.active_interactable_id = None
         self.selected_option_index = 0
         requires_immediate_ai = option.resolution_mode == "immediate_ai"
@@ -227,6 +289,12 @@ class GameSessionState:
         self.loading = False
         self.error_message = None
         self.local_message = None
+        self.text_history.clear()
+        self.selected_text_history_index = 0
+        self._append_scene_history(
+            title=f"开局场景 · {scene.scene.description}",
+            scene=scene,
+        )
         self.active_interactable_id = None
         self.selected_option_index = 0
         self.settled_action_history.clear()
@@ -234,12 +302,19 @@ class GameSessionState:
         self.remaining_action_points = self.action_points_per_round
 
     def finish_settlement(self, scene: SceneState) -> None:
-        self.settled_action_history.extend(self.round_actions)
+        round_snapshot = list(self.round_actions)
+        self.settled_action_history.extend(round_snapshot)
         self.round_actions.clear()
         self.current_scene = scene
         self.loading = False
         self.error_message = None
         self.local_message = None
+        if round_snapshot:
+            settled_actions = " / ".join(record.label for record in round_snapshot[-3:])
+            title = f"回合结算 · 第 {round_snapshot[-1].turn_index} 步"
+            if settled_actions:
+                title = f"{title} · {settled_actions}"
+            self._append_scene_history(title=title, scene=scene, turn_index=round_snapshot[-1].turn_index)
         self.active_interactable_id = None
         self.selected_option_index = 0
         self.remaining_action_points = self.action_points_per_round
@@ -247,6 +322,7 @@ class GameSessionState:
     def fail_action(self, message: str) -> None:
         self.loading = False
         self.error_message = message
+        self._append_text_history("请求失败", message, kind="error")
 
     @property
     def active_interactable(self) -> Interactable | None:
@@ -263,3 +339,41 @@ class GameSessionState:
             if interactable.id == interactable_id:
                 return interactable
         return None
+
+    def _append_scene_history(
+        self,
+        *,
+        title: str,
+        scene: SceneState,
+        turn_index: int | None = None,
+    ) -> None:
+        body = scene.narrative
+        if scene.ending_text:
+            body = f"{scene.narrative}\n\n结局：{scene.ending_text}"
+        self._append_text_history(title, body, kind="scene", turn_index=turn_index)
+
+    def _append_text_history(
+        self,
+        title: str,
+        body: str,
+        *,
+        kind: TextHistoryKind,
+        turn_index: int | None = None,
+    ) -> None:
+        cleaned_title = title.strip()
+        cleaned_body = body.strip()
+        if not cleaned_title or not cleaned_body:
+            return
+
+        entry = TextHistoryEntry(
+            title=cleaned_title,
+            body=cleaned_body,
+            kind=kind,
+            turn_index=turn_index,
+        )
+        if self.text_history and self.text_history[-1] == entry:
+            self.selected_text_history_index = len(self.text_history) - 1
+            return
+
+        self.text_history.append(entry)
+        self.selected_text_history_index = len(self.text_history) - 1

@@ -75,3 +75,49 @@ def test_game_app_uses_forced_immediate_settlement_for_flagged_option(
         assert triggered["request_type"] == "forced_immediate_choice"
     finally:
         pygame.quit()
+
+
+def test_game_app_can_browse_text_history_while_loading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    premise = build_default_premise()
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "加载浏览测试",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "这是当前场景的叙述文本。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    app._premise = premise
+    app._session = GameSessionState.create(premise)
+    app._session.finish_initial_scene(scene)
+    app._session.record_system_text("上一条", "第一条历史文本。")
+    app._session.record_system_text("下一条", "第二条历史文本。")
+    app._mode = "game"
+    app._session.loading = True
+
+    try:
+        assert app._session.selected_text_history is not None
+        assert app._session.selected_text_history.title == "下一条"
+
+        app._handle_game_keydown(pygame.K_LEFT)
+        assert app._session.selected_text_history is not None
+        assert app._session.selected_text_history.title == "上一条"
+
+        app._handle_game_keydown(pygame.K_RIGHT)
+        assert app._session.selected_text_history is not None
+        assert app._session.selected_text_history.title == "下一条"
+    finally:
+        pygame.quit()

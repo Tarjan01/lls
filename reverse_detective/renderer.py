@@ -562,6 +562,13 @@ class Renderer(TooltipMixin):
         overlay.fill((8, 10, 15, 150))
         self._surface.blit(overlay, (0, 0))
 
+        left_panel = pygame.Rect(72, 84, 320, 340)
+        right_panel = pygame.Rect(424, 70, self._width - 496, 372)
+        pygame.draw.rect(self._surface, (16, 21, 29), left_panel, border_radius=24)
+        pygame.draw.rect(self._surface, (228, 193, 127), left_panel, width=2, border_radius=24)
+        pygame.draw.rect(self._surface, (16, 18, 24), right_panel, border_radius=24)
+        pygame.draw.rect(self._surface, (118, 132, 156), right_panel, width=2, border_radius=24)
+
         title_text = (
             "AI 正在生成初始场景…"
             if not session.round_actions and not session.settled_action_history
@@ -572,30 +579,241 @@ class Renderer(TooltipMixin):
             if session.round_actions
             else "正在加载本局的初始空间布局与角色状态。"
         )
+        self._draw_loading_spinner((left_panel.centerx, left_panel.y + 92), 42)
         self._blit_clamped_line(
             self._title_font,
             title_text,
-            (self._width // 2, 170),
+            (left_panel.x + 22, left_panel.y + 152),
             (245, 240, 228),
-            self._width - 120,
-            align="center",
+            left_panel.width - 44,
         )
         self._blit_clamped_line(
             self._body_font,
             f"当前模式: {mode_label}",
-            (self._width // 2, 216),
+            (left_panel.x + 24, left_panel.y + 194),
             (219, 224, 234),
-            self._width - 160,
-            align="center",
+            left_panel.width - 48,
+        )
+        self._blit_preview_block(
+            self._small_font,
+            subtitle_text,
+            (left_panel.x + 24, left_panel.y + 226),
+            (228, 211, 182),
+            left_panel.width - 48,
+            2,
+            line_gap=5,
+        )
+
+        pending_lines = (
+            "\n".join(
+                f"{record.turn_index}. {record.label}"
+                for record in session.round_actions[-4:]
+            )
+            if session.round_actions
+            else "本次为初始生成，没有待结算动作。"
         )
         self._blit_clamped_line(
             self._small_font,
-            subtitle_text,
-            (self._width // 2, 250),
-            (228, 211, 182),
-            self._width - 140,
-            align="center",
+            "待处理文本",
+            (left_panel.x + 24, left_panel.y + 284),
+            (242, 226, 188),
+            left_panel.width - 48,
         )
+        self._blit_preview_block(
+            self._small_font,
+            pending_lines,
+            (left_panel.x + 24, left_panel.y + 308),
+            (225, 230, 238),
+            left_panel.width - 48,
+            4,
+            line_gap=4,
+            selected=True,
+        )
+
+        self._draw_loading_history_panel(session, right_panel)
+
+    def _draw_loading_spinner(self, center: tuple[int, int], radius: int) -> None:
+        ticks = pygame.time.get_ticks() / 220
+        spinner_surface = pygame.Surface((radius * 2 + 36, radius * 2 + 36), pygame.SRCALPHA)
+        spinner_rect = spinner_surface.get_rect(center=center)
+
+        for index in range(10):
+            angle = ticks + index * 0.6
+            fade = (index + 1) / 10
+            dot_radius = int(5 + 5 * fade)
+            alpha = int(40 + 200 * fade)
+            x = spinner_surface.get_width() / 2 + math.cos(angle) * radius
+            y = spinner_surface.get_height() / 2 + math.sin(angle) * radius
+            pygame.draw.circle(
+                spinner_surface,
+                (242, 209, 142, alpha),
+                (int(x), int(y)),
+                dot_radius,
+            )
+
+        pulse_surface = pygame.Surface((spinner_surface.get_width(), spinner_surface.get_height()), pygame.SRCALPHA)
+        pulse = 20 + int(8 * math.sin(pygame.time.get_ticks() / 180))
+        pygame.draw.circle(
+            pulse_surface,
+            (245, 229, 198, 36),
+            (pulse_surface.get_width() // 2, pulse_surface.get_height() // 2),
+            pulse,
+            width=3,
+        )
+        spinner_surface.blit(pulse_surface, (0, 0))
+        self._surface.blit(spinner_surface, spinner_rect)
+
+    def _draw_loading_history_panel(self, session: GameSessionState, rect: pygame.Rect) -> None:
+        self._blit_clamped_line(
+            self._title_font,
+            "文本档案",
+            (rect.x + 24, rect.y + 18),
+            (244, 238, 229),
+            rect.width - 48,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            "加载期间可按 ←/→ 或 PgUp/PgDn 查看之前的叙述、反馈与错误。",
+            (rect.x + 26, rect.y + 54),
+            (213, 217, 226),
+            rect.width - 52,
+        )
+
+        list_rect = pygame.Rect(rect.x + 20, rect.y + 92, 240, rect.height - 116)
+        detail_rect = pygame.Rect(list_rect.right + 18, rect.y + 92, rect.right - list_rect.right - 38, rect.height - 116)
+        pygame.draw.rect(self._surface, (24, 31, 42), list_rect, border_radius=18)
+        pygame.draw.rect(self._surface, (97, 109, 124), list_rect, width=2, border_radius=18)
+        pygame.draw.rect(self._surface, (26, 28, 36), detail_rect, border_radius=18)
+        pygame.draw.rect(self._surface, (121, 135, 156), detail_rect, width=2, border_radius=18)
+
+        entries = session.text_history_window(6)
+        selected_entry = session.selected_text_history
+        selected_index = session.selected_text_history_index
+
+        if not entries or selected_entry is None:
+            fallback_body = (
+                f"{session.premise.simulation_briefing}\n\n"
+                f"动机：{session.premise.motive}\n\n"
+                f"明面目标：{session.premise.initial_goal}\n\n"
+                f"隐藏目标：{session.premise.hidden_objective}\n\n"
+                f"开场钩子：{session.premise.opening_hook}"
+            )
+            self._blit_clamped_line(
+                self._small_font,
+                "案件简报",
+                (detail_rect.x + 18, detail_rect.y + 18),
+                (243, 228, 194),
+                detail_rect.width - 36,
+            )
+            available_lines = max(6, (detail_rect.height - 64) // (self._small_font.get_height() + 5))
+            self._blit_preview_block(
+                self._small_font,
+                fallback_body,
+                (detail_rect.x + 18, detail_rect.y + 50),
+                (231, 235, 241),
+                detail_rect.width - 36,
+                available_lines,
+                line_gap=5,
+                selected=True,
+            )
+            return
+
+        row_y = list_rect.y + 16
+        for entry_index, entry in entries:
+            row_rect = pygame.Rect(list_rect.x + 12, row_y, list_rect.width - 24, 44)
+            is_selected = entry_index == selected_index
+            fill = (228, 193, 127) if is_selected else (37, 44, 57)
+            border = (244, 226, 192) if is_selected else (91, 102, 118)
+            text_color = (29, 22, 15) if is_selected else (235, 240, 245)
+            badge_color = self._history_kind_color(entry.kind, is_selected)
+            pygame.draw.rect(self._surface, fill, row_rect, border_radius=14)
+            pygame.draw.rect(self._surface, border, row_rect, width=2, border_radius=14)
+            pygame.draw.rect(
+                self._surface,
+                badge_color,
+                pygame.Rect(row_rect.x + 10, row_rect.y + 12, 10, 10),
+                border_radius=5,
+            )
+            self._blit_clamped_line(
+                self._small_font,
+                entry.title,
+                (row_rect.x + 28, row_rect.y + 7),
+                text_color,
+                row_rect.width - 38,
+                selected=is_selected,
+            )
+            meta_text = (
+                f"第 {entry.turn_index} 步"
+                if entry.turn_index is not None
+                else {"scene": "场景", "local": "本地", "system": "系统", "error": "错误"}[entry.kind]
+            )
+            self._blit_clamped_line(
+                self._small_font,
+                meta_text,
+                (row_rect.x + 28, row_rect.y + 24),
+                (76, 56, 32) if is_selected else (178, 188, 202),
+                row_rect.width - 38,
+                selected=is_selected,
+            )
+            row_y += 52
+            if row_y > list_rect.bottom - 48:
+                break
+
+        self._blit_clamped_line(
+            self._small_font,
+            selected_entry.title,
+            (detail_rect.x + 18, detail_rect.y + 18),
+            (243, 228, 194),
+            detail_rect.width - 36,
+            selected=True,
+        )
+        kind_text = {
+            "scene": "场景叙述",
+            "local": "本地反馈",
+            "system": "系统提示",
+            "error": "异常信息",
+        }[selected_entry.kind]
+        meta_line = (
+            f"{kind_text} · 第 {selected_entry.turn_index} 步"
+            if selected_entry.turn_index is not None
+            else kind_text
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            meta_line,
+            (detail_rect.x + 18, detail_rect.y + 46),
+            (212, 217, 226),
+            detail_rect.width - 36,
+            selected=True,
+        )
+        available_lines = max(6, (detail_rect.height - 100) // (self._small_font.get_height() + 5))
+        self._blit_preview_block(
+            self._small_font,
+            selected_entry.body,
+            (detail_rect.x + 18, detail_rect.y + 78),
+            (231, 235, 241),
+            detail_rect.width - 36,
+            available_lines,
+            line_gap=5,
+            selected=True,
+        )
+
+    def _history_kind_color(self, kind: str, selected: bool) -> Color:
+        if selected:
+            palette = {
+                "scene": (116, 82, 35),
+                "local": (90, 74, 28),
+                "system": (86, 63, 25),
+                "error": (121, 54, 42),
+            }
+        else:
+            palette = {
+                "scene": (116, 152, 208),
+                "local": (209, 179, 101),
+                "system": (137, 207, 185),
+                "error": (211, 106, 100),
+            }
+        return palette.get(kind, (180, 180, 180))
 
     def _draw_ending_overlay(self, ending_text: str) -> None:
         overlay = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)

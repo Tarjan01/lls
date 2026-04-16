@@ -91,3 +91,44 @@ def test_renderer_draws_cached_assets(monkeypatch: pytest.MonkeyPatch, tmp_path:
         assert screen.get_at((300, 400))[:3] == (38, 84, 220)
     finally:
         pygame.quit()
+
+
+def test_renderer_draws_loading_overlay_with_text_history(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "silent.mp3",
+                "description": "加载中的场景",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "当前是等待 AI 返回的阶段。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    session = GameSessionState.create(build_default_premise())
+    session.finish_initial_scene(scene)
+    session.record_system_text("系统提示", "这里应该显示之前的文本。")
+    session.loading = True
+
+    try:
+        renderer.draw(session, "Live API", 1.2, "玩家", "演示卷宗")
+        pixel = screen.get_at((640, 220))[:3]
+        assert any(channel > 0 for channel in pixel)
+    finally:
+        pygame.quit()
