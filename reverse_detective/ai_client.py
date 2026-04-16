@@ -121,16 +121,17 @@ class ReverseDetectiveAIClient:
             timeout=self._config.timeout_seconds,
         )
 
-        response = client.responses.create(
+        with client.responses.stream(
             model=self._config.model,
             input=self._build_response_input(request),
             reasoning={"effort": self._config.reasoning_effort},
             text={"format": {"type": "json_object"}},
             store=not self._config.disable_response_storage,
             temperature=0.8,
-        )
+        ) as stream:
+            response, streamed_text = self._consume_response_stream(stream)
 
-        raw_content = self._extract_response_content(response)
+        raw_content = self._extract_response_content(response, streamed_text)
         try:
             return load_scene_payload(raw_content)
         except Exception as exc:
@@ -180,7 +181,21 @@ class ReverseDetectiveAIClient:
             },
         ]
 
-    def _extract_response_content(self, response: Any) -> str:
+    def _consume_response_stream(self, stream: Any) -> tuple[Any, str]:
+        chunks: list[str] = []
+        for event in stream:
+            if getattr(event, "type", None) != "response.output_text.delta":
+                continue
+            delta = getattr(event, "delta", None)
+            if isinstance(delta, str) and delta:
+                chunks.append(delta)
+
+        return stream.get_final_response(), "".join(chunks)
+
+    def _extract_response_content(self, response: Any, streamed_text: str = "") -> str:
+        if streamed_text.strip():
+            return streamed_text
+
         output_text = getattr(response, "output_text", None)
         if isinstance(output_text, str) and output_text.strip():
             return output_text
