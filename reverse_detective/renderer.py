@@ -10,7 +10,7 @@ import pygame
 
 from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import Interactable, NPC, SceneState
-from reverse_detective.utils.text import wrap_text
+from reverse_detective.utils.text import clamp_lines, wrap_text
 
 
 Color = tuple[int, int, int]
@@ -333,30 +333,202 @@ def _tint(color: Color, delta: int) -> Color:
 
 
 class MenuRenderer:
-    """Front-page dossier style menu renderer."""
+    """Renderer for the main menu, dossier browser, settings and modal overlays."""
 
     def __init__(self, surface: pygame.Surface, width: int, height: int):
         self._surface = surface
         self._width = width
         self._height = height
-        self._display_font = pygame.font.SysFont("georgia", 44, bold=True)
+        self._display_font = pygame.font.SysFont("georgia", 46, bold=True)
+        self._hero_font = pygame.font.SysFont("georgia", 72, bold=True)
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28, bold=True)
-        self._body_font = pygame.font.SysFont("microsoftyaheiui", 19)
+        self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 15)
 
-    def draw(self, story: Any, role: Any, story_index: int, story_count: int) -> None:
+    def draw_main_menu(
+        self,
+        background: Any,
+        options: list[str],
+        selected_index: int,
+        status_text: str | None,
+    ) -> None:
         self._draw_background()
-        self._draw_header(story, story_index, story_count)
-        self._draw_simulation_panel(story)
-        self._draw_case_panel(story)
-        self._draw_role_panel(story, role)
-        self._draw_role_strip(story, role)
-        self._draw_footer()
+        self._draw_chrome(background.game_title, background.game_subtitle, background.operator_name)
+
+        left_panel = pygame.Rect(48, 150, 560, 470)
+        right_panel = pygame.Rect(644, 150, 588, 470)
+        self._panel(left_panel, (16, 21, 28))
+        self._panel(right_panel, (27, 22, 19))
+
+        hero = self._hero_font.render("案件模拟台", True, (243, 232, 207))
+        self._surface.blit(hero, (82, 182))
+        intro_lines = clamp_lines(
+            wrap_text(background.menu_intro, self._body_font, left_panel.width - 58),
+            4,
+        )
+        self._blit_lines(intro_lines, self._body_font, (82, 276), (232, 235, 239), 8)
+
+        self._section_title("江川的动机", 82, 394)
+        background_lines = clamp_lines(
+            wrap_text(background.background, self._small_font, left_panel.width - 58),
+            7,
+        )
+        self._blit_lines(background_lines, self._small_font, (82, 430), (208, 214, 224), 6)
+
+        self._section_title("主菜单", 674, 188)
+        menu_intro = self._small_font.render("先选择你的行动方向，再进入具体卷宗。", True, (224, 225, 232))
+        self._surface.blit(menu_intro, (674, 226))
+
+        for index, option in enumerate(options):
+            option_rect = pygame.Rect(674, 276 + index * 88, 516, 66)
+            selected = index == selected_index
+            fill = (228, 193, 127) if selected else (41, 47, 58)
+            border = (246, 226, 193) if selected else (103, 113, 126)
+            text_color = (29, 22, 15) if selected else (236, 239, 244)
+            pygame.draw.rect(self._surface, fill, option_rect, border_radius=18)
+            pygame.draw.rect(self._surface, border, option_rect, width=2, border_radius=18)
+            label = self._title_font.render(option, True, text_color)
+            hint = self._small_font.render(self._main_menu_hint(option), True, text_color)
+            self._surface.blit(label, (option_rect.x + 20, option_rect.y + 14))
+            self._surface.blit(hint, (option_rect.x + 22, option_rect.y + 42))
+
+        footer = "主菜单控制: 上下切换 | Enter 确认 | Esc 退出"
+        self._draw_footer(footer, status_text)
+        pygame.display.flip()
+
+    def draw_story_browser(
+        self,
+        background: Any,
+        story: Any,
+        role: Any,
+        story_index: int,
+        story_count: int,
+        focus: str,
+        detail_modal: Any | None,
+    ) -> None:
+        self._draw_background()
+        self._draw_chrome(background.game_title, "卷宗选择", background.operator_name)
+
+        left = pygame.Rect(42, 126, 548, 520)
+        right = pygame.Rect(620, 126, 586, 520)
+        self._panel(left, (17, 22, 28))
+        self._panel(right, (25, 21, 18))
+
+        self._section_title(f"卷宗 {story_index + 1}/{story_count}", left.x + 22, left.y + 18)
+        self._draw_summary_card(
+            rect=pygame.Rect(left.x + 20, left.y + 58, left.width - 40, 412),
+            title=story.title,
+            subtitle=story.subtitle,
+            accent=(225, 196, 131),
+            body_blocks=[
+                f"地点: {story.location}",
+                f"死者: {story.victim_name}",
+                story.core_case,
+                story.opening_hook,
+            ],
+            focused=focus == "story",
+        )
+        ranking_text = " | ".join(rank.rank for rank in story.rankings[:4])
+        ranking_label = self._small_font.render(
+            self._fit_text(f"评级: {ranking_text}", self._small_font, left.width - 48),
+            True,
+            (203, 210, 220),
+        )
+        self._surface.blit(ranking_label, (left.x + 24, left.bottom - 40))
+
+        self._section_title("嫌疑人身份", right.x + 22, right.y + 18)
+        self._draw_summary_card(
+            rect=pygame.Rect(right.x + 20, right.y + 58, right.width - 40, 266),
+            title=role.display_name,
+            subtitle=role.primary_tool_name,
+            accent=(226, 177, 139),
+            body_blocks=[
+                role.background,
+                f"动机: {role.motive}",
+                f"隐藏目标: {role.hidden_objective}",
+            ],
+            focused=focus == "role",
+        )
+        self._draw_role_strip(story.roles, role, right.x + 20, right.y + 344, right.width - 40)
+
+        footer = "卷宗页控制: 左右换卷宗 | 上下换身份 | Tab 切换焦点 | Enter 查看详情 | Space 开始案件 | Backspace 返回"
+        self._draw_footer(footer, None)
+        if detail_modal is not None:
+            self._draw_detail_modal(detail_modal)
+        pygame.display.flip()
+
+    def draw_settings(
+        self,
+        background: Any,
+        fields: list[tuple[str, str, str]],
+        selected_index: int,
+        draft: Any,
+        editing_field: str | None,
+        input_buffer: str,
+        status_text: str | None,
+    ) -> None:
+        self._draw_background()
+        self._draw_chrome(background.game_title, "选项设置", background.operator_name)
+
+        panel = pygame.Rect(88, 126, self._width - 176, 520)
+        self._panel(panel, (16, 21, 28))
+        self._section_title("运行与 AI 请求设置", panel.x + 24, panel.y + 18)
+
+        header = self._small_font.render(
+            "包含 AI 请求地址、API Key、模型、回退策略以及基础显示设置。选中后按 Enter 编辑，布尔项可直接切换。",
+            True,
+            (219, 224, 231),
+        )
+        self._surface.blit(header, (panel.x + 24, panel.y + 58))
+
+        for index, (field_name, label, field_kind) in enumerate(fields):
+            row = pygame.Rect(panel.x + 24, panel.y + 96 + index * 52, panel.width - 48, 42)
+            selected = index == selected_index
+            fill = (228, 193, 127) if selected else (34, 41, 52)
+            border = (244, 227, 192) if selected else (97, 109, 123)
+            text_color = (28, 22, 15) if selected else (236, 240, 245)
+            pygame.draw.rect(self._surface, fill, row, border_radius=12)
+            pygame.draw.rect(self._surface, border, row, width=2, border_radius=12)
+
+            name_label = self._small_font.render(
+                self._fit_text(label, self._small_font, 250),
+                True,
+                text_color,
+            )
+            value_label = self._small_font.render(
+                self._fit_text(
+                    self._format_setting_value(field_name, field_kind, draft),
+                    self._small_font,
+                    row.width - 320,
+                ),
+                True,
+                text_color,
+            )
+            self._surface.blit(name_label, (row.x + 14, row.y + 11))
+            self._surface.blit(value_label, (row.x + 280, row.y + 11))
+
+        tips = [
+            "必要设置:",
+            "1. 请求 URL / Base URL",
+            "2. API Key",
+            "3. 模型名与回退策略",
+            "4. 窗口标题与帧率",
+        ]
+        self._blit_lines(tips, self._small_font, (panel.x + 24, panel.bottom - 112), (230, 210, 167), 5)
+        footer = "设置页控制: 上下切换 | Enter 编辑/切换 | 左右切换布尔值 | S 保存 | D 放弃修改 | Backspace 返回"
+        self._draw_footer(footer, status_text)
+
+        if editing_field is not None:
+            self._draw_input_modal(
+                title=self._field_label(editing_field, fields),
+                value=input_buffer,
+                masked=editing_field == "api_key",
+            )
         pygame.display.flip()
 
     def _draw_background(self) -> None:
-        top = (13, 28, 31)
-        bottom = (59, 43, 34)
+        top = (11, 24, 28)
+        bottom = (53, 39, 30)
         for y in range(self._height):
             ratio = y / max(self._height - 1, 1)
             color = _lerp_color(top, bottom, ratio)
@@ -367,140 +539,61 @@ class MenuRenderer:
         for y in range(110, self._height, 150):
             pygame.draw.line(self._surface, (29, 51, 54), (0, y), (self._width, y - 50), width=1)
 
-    def _draw_header(self, story: Any, story_index: int, story_count: int) -> None:
+    def _draw_chrome(self, title_text: str, subtitle_text: str, operator_name: str) -> None:
         header_rect = pygame.Rect(34, 24, self._width - 68, 84)
         pygame.draw.rect(self._surface, (19, 24, 33), header_rect, border_radius=20)
         pygame.draw.rect(self._surface, (201, 169, 111), header_rect, width=2, border_radius=20)
 
-        title = self._display_font.render("REVERSE DETECTIVE", True, (244, 232, 207))
-        subtitle = self._small_font.render("江川案件模拟台", True, (212, 213, 222))
-        badge = self._small_font.render(
-            f"卷宗 {story_index + 1}/{story_count}",
-            True,
-            (36, 28, 18),
-        )
+        title = self._display_font.render(title_text, True, (244, 232, 207))
+        subtitle = self._small_font.render(subtitle_text, True, (212, 213, 222))
+        badge = self._small_font.render(f"操作员 {operator_name}", True, (36, 28, 18))
 
-        badge_rect = pygame.Rect(self._width - 172, 42, 118, 34)
+        badge_rect = pygame.Rect(self._width - 208, 42, 154, 34)
         pygame.draw.rect(self._surface, (228, 194, 131), badge_rect, border_radius=12)
         self._surface.blit(title, (58, 34))
         self._surface.blit(subtitle, (60, 78))
         self._surface.blit(badge, (badge_rect.x + 18, badge_rect.y + 9))
 
-        case_title = self._title_font.render(story.title, True, (244, 240, 233))
-        case_subtitle = self._small_font.render(story.subtitle, True, (199, 208, 217))
-        self._surface.blit(case_title, (490, 42))
-        self._surface.blit(case_subtitle, (492, 76))
+    def _draw_summary_card(
+        self,
+        rect: pygame.Rect,
+        title: str,
+        subtitle: str,
+        accent: Color,
+        body_blocks: list[str],
+        focused: bool,
+    ) -> None:
+        fill = (36, 42, 52) if not focused else (51, 58, 70)
+        border = accent if focused else (96, 106, 118)
+        pygame.draw.rect(self._surface, fill, rect, border_radius=18)
+        pygame.draw.rect(self._surface, border, rect, width=2, border_radius=18)
 
-    def _draw_simulation_panel(self, story: Any) -> None:
-        panel = pygame.Rect(34, 130, 356, 390)
-        self._panel(panel, (29, 34, 42))
-        self._section_title("模拟缘起", panel.x + 22, panel.y + 18)
+        title_surface = self._title_font.render(title, True, (244, 240, 233))
+        subtitle_surface = self._small_font.render(subtitle, True, accent)
+        self._surface.blit(title_surface, (rect.x + 18, rect.y + 16))
+        self._surface.blit(subtitle_surface, (rect.x + 18, rect.y + 54))
 
-        operator = self._title_font.render(f"侦探 {story.simulation_operator_name}", True, (241, 230, 206))
-        self._surface.blit(operator, (panel.x + 22, panel.y + 54))
-        self._blit_lines(
-            wrap_text(story.simulation_background, self._body_font, panel.width - 44),
-            self._body_font,
-            (panel.x + 22, panel.y + 98),
-            (224, 227, 233),
-            line_gap=6,
-        )
-        self._blit_lines(
-            wrap_text(story.simulation_briefing, self._small_font, panel.width - 44),
-            self._small_font,
-            (panel.x + 22, panel.y + 268),
-            (230, 208, 158),
-            line_gap=6,
-        )
-
-    def _draw_case_panel(self, story: Any) -> None:
-        panel = pygame.Rect(412, 130, 426, 390)
-        self._panel(panel, (25, 29, 36))
-        self._section_title("案件卷宗", panel.x + 22, panel.y + 18)
-
-        blocks = [
-            f"地点: {story.location}",
-            f"死者: {story.victim_name}",
-            story.core_case,
-            story.setting,
-        ]
-        y = panel.y + 58
-        for block in blocks:
-            lines = wrap_text(block, self._body_font, panel.width - 44)
-            self._blit_lines(lines, self._body_font, (panel.x + 22, y), (228, 231, 236), line_gap=5)
-            y += len(lines) * 28 + 16
-
-        badge_rect = pygame.Rect(panel.x + 22, panel.bottom - 86, panel.width - 44, 62)
-        pygame.draw.rect(self._surface, (61, 41, 34), badge_rect, border_radius=14)
-        pygame.draw.rect(self._surface, (183, 128, 109), badge_rect, width=1, border_radius=14)
-        self._blit_lines(
-            wrap_text(story.opening_hook, self._small_font, badge_rect.width - 24),
-            self._small_font,
-            (badge_rect.x + 12, badge_rect.y + 10),
-            (245, 233, 225),
-            line_gap=4,
-        )
-
-    def _draw_role_panel(self, story: Any, role: Any) -> None:
-        panel = pygame.Rect(860, 130, 386, 390)
-        self._panel(panel, (29, 22, 20))
-        self._section_title("嫌疑人身份", panel.x + 22, panel.y + 18)
-
-        title = self._title_font.render(role.display_name, True, (247, 228, 196))
-        self._surface.blit(title, (panel.x + 22, panel.y + 54))
-
-        motive_label = self._small_font.render("动机", True, (234, 196, 129))
-        self._surface.blit(motive_label, (panel.x + 22, panel.y + 98))
-        self._blit_lines(
-            wrap_text(role.motive, self._small_font, panel.width - 44),
-            self._small_font,
-            (panel.x + 22, panel.y + 122),
-            (229, 229, 234),
-            line_gap=4,
-        )
-
-        self._section_subtitle("特殊条件", panel.x + 22, panel.y + 198)
-        y = panel.y + 224
-        for item in role.special_conditions[:2]:
-            bullet = self._small_font.render(f"• {item}", True, (224, 227, 232))
-            self._surface.blit(bullet, (panel.x + 22, y))
-            y += 22
-
-        self._section_subtitle("专属工具", panel.x + 22, panel.y + 274)
-        y = panel.y + 300
-        for tool in role.signature_tools[:2]:
-            name = self._small_font.render(f"• {tool.name}", True, (247, 212, 140))
-            self._surface.blit(name, (panel.x + 22, y))
-            y += 20
-            self._blit_lines(
-                wrap_text(tool.description, self._small_font, panel.width - 58),
-                self._small_font,
-                (panel.x + 34, y),
-                (218, 222, 228),
-                line_gap=3,
-            )
-            y += 38
-
-        hidden = pygame.Rect(panel.x + 20, panel.bottom - 70, panel.width - 40, 50)
-        pygame.draw.rect(self._surface, (73, 33, 31), hidden, border_radius=12)
-        hidden_title = self._small_font.render("隐藏目标", True, (247, 213, 160))
-        hidden_text = self._small_font.render(role.hidden_objective, True, (245, 236, 230))
-        self._surface.blit(hidden_title, (hidden.x + 12, hidden.y + 8))
-        self._surface.blit(hidden_text, (hidden.x + 12, hidden.y + 26))
-
-    def _draw_role_strip(self, story: Any, selected_role: Any) -> None:
-        strip = pygame.Rect(34, 540, self._width - 68, 124)
-        self._panel(strip, (18, 21, 27))
-
-        card_width = 286
-        gap = 16
-        start_x = strip.x + 18
-        y = strip.y + 16
-        for index, role in enumerate(story.roles):
-            x = start_x + index * (card_width + gap)
-            if x + card_width > strip.right - 18:
+        y = rect.y + 92
+        for block in body_blocks:
+            lines = clamp_lines(wrap_text(block, self._small_font, rect.width - 36), 4)
+            self._blit_lines(lines, self._small_font, (rect.x + 18, y), (221, 225, 231), 4)
+            y += len(lines) * 22 + 12
+            if y > rect.bottom - 40:
                 break
-            card = pygame.Rect(x, y, card_width, 90)
+
+        hint = self._small_font.render("Enter 查看完整内容", True, accent)
+        self._surface.blit(hint, (rect.x + 18, rect.bottom - 28))
+
+    def _draw_role_strip(self, roles: Any, selected_role: Any, x: int, y: int, width: int) -> None:
+        strip = pygame.Rect(x, y, width, 156)
+        pygame.draw.rect(self._surface, (18, 21, 27), strip, border_radius=18)
+        pygame.draw.rect(self._surface, (106, 112, 122), strip, width=2, border_radius=18)
+        row_height = 28
+        for index, role in enumerate(roles):
+            row_y = strip.y + 16 + index * 30
+            if row_y + row_height > strip.bottom - 12:
+                break
+            card = pygame.Rect(strip.x + 14, row_y, strip.width - 28, row_height)
             selected = role.id == selected_role.id
             fill = (228, 193, 127) if selected else (39, 44, 54)
             border = (244, 228, 198) if selected else (99, 109, 124)
@@ -509,19 +602,68 @@ class MenuRenderer:
             pygame.draw.rect(self._surface, fill, card, border_radius=16)
             pygame.draw.rect(self._surface, border, card, width=2, border_radius=16)
 
-            title = self._small_font.render(role.display_name, True, title_color)
-            strat = self._small_font.render(role.primary_tool_name, True, body_color)
-            self._surface.blit(title, (card.x + 14, card.y + 14))
-            self._surface.blit(strat, (card.x + 14, card.y + 46))
+            title = self._small_font.render(
+                self._fit_text(role.display_name, self._small_font, 220),
+                True,
+                title_color,
+            )
+            tool = self._small_font.render(
+                self._fit_text(role.primary_tool_name, self._small_font, 250),
+                True,
+                body_color,
+            )
+            self._surface.blit(title, (card.x + 12, card.y + 6))
+            self._surface.blit(tool, (card.right - tool.get_width() - 12, card.y + 6))
 
-    def _draw_footer(self) -> None:
-        footer_rect = pygame.Rect(34, self._height - 44, self._width - 68, 26)
-        text = self._small_font.render(
-            "菜单控制: 左右切换卷宗 | 上下切换角色 | Enter 开始案件 | Esc 退出",
+    def _draw_detail_modal(self, modal: Any) -> None:
+        overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
+        overlay.fill((8, 10, 14, 176))
+        self._surface.blit(overlay, (0, 0))
+
+        rect = pygame.Rect(148, 86, self._width - 296, self._height - 172)
+        pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
+        pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
+
+        title = self._title_font.render(modal.title, True, (247, 233, 204))
+        subtitle = self._small_font.render(modal.subtitle, True, (220, 223, 232))
+        self._surface.blit(title, (rect.x + 24, rect.y + 20))
+        self._surface.blit(subtitle, (rect.x + 24, rect.y + 58))
+
+        lines: list[str] = []
+        for block in modal.body_lines:
+            if not block:
+                lines.append(" ")
+                continue
+            lines.extend(wrap_text(block, self._small_font, rect.width - 48))
+        lines = clamp_lines(lines, 22)
+        self._blit_lines(lines, self._small_font, (rect.x + 24, rect.y + 98), (232, 235, 241), 6)
+        footer = self._small_font.render(
+            self._fit_text(modal.footer, self._small_font, rect.width - 48),
             True,
-            (224, 229, 235),
+            (238, 199, 132),
         )
-        self._surface.blit(text, (footer_rect.x + 4, footer_rect.y + 2))
+        self._surface.blit(footer, (rect.x + 24, rect.bottom - 32))
+
+    def _draw_input_modal(self, title: str, value: str, masked: bool) -> None:
+        overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
+        overlay.fill((6, 8, 12, 176))
+        self._surface.blit(overlay, (0, 0))
+
+        rect = pygame.Rect(236, 220, self._width - 472, 172)
+        pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
+        pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
+        title_surface = self._title_font.render(title, True, (247, 233, 204))
+        subtitle = self._small_font.render("Enter 保存输入 | Esc 取消", True, (220, 223, 232))
+        self._surface.blit(title_surface, (rect.x + 24, rect.y + 20))
+        self._surface.blit(subtitle, (rect.x + 24, rect.y + 56))
+
+        input_rect = pygame.Rect(rect.x + 22, rect.y + 96, rect.width - 44, 44)
+        pygame.draw.rect(self._surface, (37, 42, 52), input_rect, border_radius=12)
+        pygame.draw.rect(self._surface, (226, 193, 128), input_rect, width=2, border_radius=12)
+        display_value = value if not masked else "*" * len(value)
+        preview = self._fit_text(display_value or " ", self._small_font, input_rect.width - 24)
+        value_surface = self._small_font.render(preview or " ", True, (244, 240, 233))
+        self._surface.blit(value_surface, (input_rect.x + 12, input_rect.y + 13))
 
     def _panel(self, rect: pygame.Rect, fill: Color) -> None:
         pygame.draw.rect(self._surface, fill, rect, border_radius=18)
@@ -534,6 +676,60 @@ class MenuRenderer:
     def _section_subtitle(self, text: str, x: int, y: int) -> None:
         rendered = self._small_font.render(text, True, (235, 192, 125))
         self._surface.blit(rendered, (x, y))
+
+    def _draw_footer(self, text: str, status_text: str | None) -> None:
+        footer_rect = pygame.Rect(34, self._height - 48, self._width - 68, 30)
+        footer = self._small_font.render(
+            self._fit_text(text, self._small_font, footer_rect.width - 320),
+            True,
+            (224, 229, 235),
+        )
+        self._surface.blit(footer, (footer_rect.x + 4, footer_rect.y + 4))
+        if status_text:
+            status = self._small_font.render(
+                self._fit_text(status_text, self._small_font, 300),
+                True,
+                (237, 203, 138),
+            )
+            self._surface.blit(status, (footer_rect.right - status.get_width(), footer_rect.y + 4))
+
+    def _field_label(self, field_name: str, fields: list[tuple[str, str, str]]) -> str:
+        for candidate_name, label, _ in fields:
+            if candidate_name == field_name:
+                return label
+        return field_name
+
+    def _format_setting_value(self, field_name: str, field_kind: str, draft: Any) -> str:
+        value = getattr(draft, field_name)
+        if field_kind == "bool":
+            return "开启" if value else "关闭"
+        if field_name == "api_key":
+            return self._mask_secret(str(value))
+        return str(value) or "(空)"
+
+    def _main_menu_hint(self, option: str) -> str:
+        hints = {
+            "开始游戏": "进入卷宗选择，查看简介并决定要扮演的身份。",
+            "选项设置": "调整请求 URL、API Key、模型与基础运行参数。",
+            "退出游戏": "关闭案件模拟台。",
+        }
+        return hints.get(option, "")
+
+    def _mask_secret(self, value: str) -> str:
+        if not value:
+            return "(未设置)"
+        if len(value) <= 8:
+            return "*" * len(value)
+        return f"{value[:4]}...{value[-4:]}"
+
+    def _fit_text(self, text: str, font: Any, max_width: int) -> str:
+        if max_width <= 0 or font.size(text)[0] <= max_width:
+            return text
+
+        candidate = text
+        while candidate and font.size(candidate + "…")[0] > max_width:
+            candidate = candidate[:-1]
+        return (candidate or "") + "…"
 
     def _blit_lines(
         self,

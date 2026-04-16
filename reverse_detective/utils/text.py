@@ -28,3 +28,16 @@ def wrap_text(text: str, font: Any, max_width: int) -> list[str]:
         lines.append(current.rstrip())
 
     return lines or [" "]
+
+
+def clamp_lines(lines: list[str], max_lines: int) -> list[str]:
+    """Clamp wrapped lines to a fixed count and append an ellipsis when needed."""
+
+    if max_lines <= 0:
+        return []
+    if len(lines) <= max_lines:
+        return lines
+
+    clamped = list(lines[:max_lines])
+    clamped[-1] = clamped[-1].rstrip(" .。") + "…"
+    return clamped
