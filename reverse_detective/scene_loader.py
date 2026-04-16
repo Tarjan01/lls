@@ -7,8 +7,10 @@ import json
 from typing import Any
 
 from reverse_detective.models import (
+    ActionLocalLogic,
     ActionOption,
     Interactable,
+    InteractableState,
     NPC,
     Point,
     SceneBackdrop,
@@ -18,6 +20,11 @@ from reverse_detective.models import (
 
 class SceneValidationError(ValueError):
     """Raised when a scene payload does not match the documented schema."""
+
+
+_INTERACTABLE_STATE_KEYS = {"opened", "locked", "hidden", "disabled"}
+_OPTION_KEYS = {"label", "action_id", "local_logic"}
+_LOCAL_LOGIC_KEYS = {"requires_state", "set_state", "success_text", "failure_text"}
 
 
 def load_scene_payload(payload: str | Mapping[str, Any]) -> SceneState:
@@ -92,8 +99,20 @@ def scene_to_dict(scene: SceneState) -> dict[str, Any]:
                 "name": interactable.name,
                 "image": interactable.image,
                 "position": list(interactable.position),
+                "state": interactable.state.to_dict(),
                 "options": [
-                    {"label": option.label, "action_id": option.action_id}
+                    {
+                        "label": option.label,
+                        "action_id": option.action_id,
+                        "local_logic": None
+                        if option.local_logic is None
+                        else {
+                            "requires_state": dict(option.local_logic.requires_state),
+                            "set_state": dict(option.local_logic.set_state),
+                            "success_text": option.local_logic.success_text,
+                            "failure_text": option.local_logic.failure_text,
+                        },
+                    }
                     for option in interactable.options
                 ],
             }
@@ -133,15 +152,22 @@ def _parse_npc(value: Any, index: int) -> NPC:
 def _parse_interactable(value: Any, index: int) -> Interactable:
     path = f"interactables[{index}]"
     interactable_data = _require_mapping(value, path)
-    _require_exact_keys(
+    _require_allowed_keys(
         interactable_data,
-        {"id", "name", "image", "position", "options"},
+        {"id", "name", "image", "position", "options", "state"},
         path,
     )
+    _require_required_keys(interactable_data, {"id", "name", "image", "position", "options"}, path)
 
     options_raw = _require_sequence(interactable_data["options"], f"{path}.options")
     if not options_raw:
         raise SceneValidationError(f"{path}.options must not be empty.")
+
+    state_raw = interactable_data.get("state")
+    if state_raw is None:
+        state = InteractableState()
+    else:
+        state = _parse_interactable_state(state_raw, f"{path}.state")
 
     options = tuple(_parse_option(item, index, path) for index, item in enumerate(options_raw))
 
@@ -151,18 +177,60 @@ def _parse_interactable(value: Any, index: int) -> Interactable:
         image=_require_non_empty_string(interactable_data["image"], f"{path}.image"),
         position=_require_point(interactable_data["position"], f"{path}.position"),
         options=options,
+        state=state,
+    )
+
+
+def _parse_interactable_state(value: Any, path: str) -> InteractableState:
+    state_data = _require_mapping(value, path)
+    _require_exact_keys(state_data, _INTERACTABLE_STATE_KEYS, path)
+    return InteractableState(
+        opened=_require_bool(state_data["opened"], f"{path}.opened"),
+        locked=_require_bool(state_data["locked"], f"{path}.locked"),
+        hidden=_require_bool(state_data["hidden"], f"{path}.hidden"),
+        disabled=_require_bool(state_data["disabled"], f"{path}.disabled"),
     )
 
 
 def _parse_option(value: Any, option_index: int, parent_path: str) -> ActionOption:
     path = f"{parent_path}.options[{option_index}]"
     option_data = _require_mapping(value, path)
-    _require_exact_keys(option_data, {"label", "action_id"}, path)
+    _require_allowed_keys(option_data, _OPTION_KEYS, path)
+    _require_required_keys(option_data, {"label", "action_id"}, path)
+
+    local_logic_raw = option_data.get("local_logic")
+    local_logic = (
+        None if local_logic_raw is None else _parse_local_logic(local_logic_raw, f"{path}.local_logic")
+    )
 
     return ActionOption(
         label=_require_non_empty_string(option_data["label"], f"{path}.label"),
         action_id=_require_non_empty_string(option_data["action_id"], f"{path}.action_id"),
+        local_logic=local_logic,
     )
+
+
+def _parse_local_logic(value: Any, path: str) -> ActionLocalLogic:
+    logic_data = _require_mapping(value, path)
+    _require_exact_keys(logic_data, _LOCAL_LOGIC_KEYS, path)
+    return ActionLocalLogic(
+        requires_state=_require_partial_state_map(logic_data["requires_state"], f"{path}.requires_state"),
+        set_state=_require_partial_state_map(logic_data["set_state"], f"{path}.set_state"),
+        success_text=_require_optional_string(logic_data["success_text"], f"{path}.success_text"),
+        failure_text=_require_optional_string(logic_data["failure_text"], f"{path}.failure_text"),
+    )
+
+
+def _require_partial_state_map(value: Any, path: str) -> dict[str, bool]:
+    state_data = _require_mapping(value, path)
+    invalid_keys = sorted(set(state_data.keys()) - _INTERACTABLE_STATE_KEYS)
+    if invalid_keys:
+        raise SceneValidationError(f"{path} contains invalid state keys {invalid_keys!r}.")
+
+    parsed: dict[str, bool] = {}
+    for key, raw_value in state_data.items():
+        parsed[key] = _require_bool(raw_value, f"{path}.{key}")
+    return parsed
 
 
 def _require_mapping(value: Any, path: str) -> dict[str, Any]:
@@ -187,6 +255,12 @@ def _require_optional_string(value: Any, path: str) -> str | None:
     if value is None:
         return None
     return _require_non_empty_string(value, path)
+
+
+def _require_bool(value: Any, path: str) -> bool:
+    if not isinstance(value, bool):
+        raise SceneValidationError(f"{path} must be a boolean.")
+    return value
 
 
 def _require_point(value: Any, path: str) -> Point:
@@ -245,3 +319,15 @@ def _require_exact_keys(value: Mapping[str, Any], expected: set[str], path: str)
         if extra:
             fragments.append(f"unexpected keys {extra!r}")
         raise SceneValidationError(f"{path} has invalid schema: {', '.join(fragments)}.")
+
+
+def _require_allowed_keys(value: Mapping[str, Any], allowed: set[str], path: str) -> None:
+    extra = sorted(set(value.keys()) - allowed)
+    if extra:
+        raise SceneValidationError(f"{path} has invalid schema: unexpected keys {extra!r}.")
+
+
+def _require_required_keys(value: Mapping[str, Any], required: set[str], path: str) -> None:
+    missing = sorted(required - set(value.keys()))
+    if missing:
+        raise SceneValidationError(f"{path} has invalid schema: missing keys {missing!r}.")

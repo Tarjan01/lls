@@ -94,7 +94,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
             premise=premise,
             current_scene=None,
             history=(),
-            latest_choice=None,
+            recent_actions=(),
         )
     )
 
@@ -105,6 +105,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert isinstance(response_input[1]["content"], str)
     assert '"scene_layout"' in response_input[1]["content"]
     assert '"coordinate_system": "pixel"' in response_input[1]["content"]
+    assert '"recent_actions"' in response_input[1]["content"]
 
 
 def test_live_scene_uses_streaming_responses_api(

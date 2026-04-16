@@ -165,3 +165,52 @@ def test_load_scene_payload_rejects_non_integral_coordinate_values() -> None:
 
     with pytest.raises(SceneValidationError, match="must be an integer"):
         load_scene_payload(payload)
+
+
+def test_load_scene_payload_parses_interactable_state_and_local_logic() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "本地逻辑测试",
+        },
+        "npcs": [],
+        "interactables": [
+            {
+                "id": "door",
+                "name": "书房门",
+                "image": "locked_door.png",
+                "position": [360, 220],
+                "state": {
+                    "opened": False,
+                    "locked": True,
+                    "hidden": False,
+                    "disabled": False,
+                },
+                "options": [
+                    {
+                        "label": "撬开门锁",
+                        "action_id": "unlock_door",
+                        "local_logic": {
+                            "requires_state": {"locked": True},
+                            "set_state": {"locked": False},
+                            "success_text": "门锁弹开了。",
+                            "failure_text": "已经解锁。",
+                        },
+                    }
+                ],
+            }
+        ],
+        "narrative": "本地逻辑应该被完整解析。",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    scene = load_scene_payload(payload)
+    roundtrip = scene_to_dict(scene)
+
+    assert scene.interactables[0].state.locked is True
+    assert scene.interactables[0].options[0].local_logic is not None
+    assert scene.interactables[0].options[0].local_logic.set_state == {"locked": False}
+    assert roundtrip["interactables"][0]["state"]["locked"] is True
+    assert roundtrip["interactables"][0]["options"][0]["local_logic"]["success_text"] == "门锁弹开了。"

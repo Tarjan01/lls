@@ -31,11 +31,28 @@ PROMPT_SCHEMA = {
     ],
     "interactables": [
         {
-            "id": "string",
-            "name": "string",
+            "id": "study_door",
+            "name": "书房门",
             "image": "locked_door.png",
-            "position": [0, 0],
-            "options": [{"label": "string", "action_id": "string"}],
+            "position": [860, 280],
+            "state": {
+                "opened": False,
+                "locked": True,
+                "hidden": False,
+                "disabled": False,
+            },
+            "options": [
+                {
+                    "label": "撬开门锁",
+                    "action_id": "unlock_door",
+                    "local_logic": {
+                        "requires_state": {"locked": True},
+                        "set_state": {"locked": False},
+                        "success_text": "你撬开了门锁。",
+                        "failure_text": "这扇门现在不需要再撬。"
+                    },
+                }
+            ],
         }
     ],
     "narrative": "string",
@@ -48,6 +65,7 @@ LIVE_WORLD_HEIGHT = 520
 LIVE_WORLD_X_RANGE = (96, LIVE_WORLD_WIDTH - 96)
 LIVE_WORLD_Y_RANGE = (140, LIVE_WORLD_HEIGHT - 68)
 LIVE_NORMALIZED_COORDINATE_MAX = 120
+ACTION_POINTS_PER_SETTLEMENT = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,7 +73,7 @@ class AIRequestPayload:
     premise: StoryPremise
     current_scene: SceneState | None
     history: tuple[ActionRecord, ...]
-    latest_choice: PendingChoice | None
+    recent_actions: tuple[ActionRecord, ...]
 
 
 class AIClientError(RuntimeError):
@@ -96,7 +114,23 @@ class ReverseDetectiveAIClient:
                 premise=premise,
                 current_scene=None,
                 history=(),
-                latest_choice=None,
+                recent_actions=(),
+            )
+        )
+
+    def settle_round(
+        self,
+        premise: StoryPremise,
+        current_scene: SceneState,
+        history: list[ActionRecord],
+        recent_actions: list[ActionRecord],
+    ) -> SceneState:
+        return self._generate_scene(
+            AIRequestPayload(
+                premise=premise,
+                current_scene=current_scene,
+                history=tuple(history),
+                recent_actions=tuple(recent_actions),
             )
         )
 
@@ -107,13 +141,11 @@ class ReverseDetectiveAIClient:
         history: list[ActionRecord],
         latest_choice: PendingChoice,
     ) -> SceneState:
-        return self._generate_scene(
-            AIRequestPayload(
-                premise=premise,
-                current_scene=current_scene,
-                history=tuple(history),
-                latest_choice=latest_choice,
-            )
+        return self.settle_round(
+            premise,
+            current_scene,
+            history,
+            [latest_choice.to_record()],
         )
 
     def _generate_scene(self, request: AIRequestPayload) -> SceneState:
@@ -144,7 +176,7 @@ class ReverseDetectiveAIClient:
             reasoning={"effort": self._config.reasoning_effort},
             text={"format": {"type": "json_object"}},
             store=not self._config.disable_response_storage,
-            temperature=0.8,
+            temperature=0.7,
         ) as stream:
             streamed_scene, response, streamed_text = self._consume_response_stream(stream)
 
@@ -163,25 +195,38 @@ class ReverseDetectiveAIClient:
             "You generate scene JSON for a reverse-detective game. "
             "Return exactly one JSON object and nothing else. "
             "Do not return markdown, explanations, or code fences. "
-            "After each player choice, generate the next scene from the initial premise, full action history, and latest choice. "
-            "The JSON must match this schema exactly with no missing or extra fields:\n"
+            "The client performs local interactions first and only asks you to settle the round after several actions. "
+            "You must return the next settled scene after adjudicating the whole round. "
+            "The JSON must match this schema exactly with no missing or extra root fields:\n"
             f"{schema_text}\n"
             "Requirements:\n"
             "1. game_status must be one of ongoing, player_win, player_lose, special_ending.\n"
             "2. ending_text must be null when game_status is ongoing, otherwise it must contain a concrete ending text.\n"
-            f"3. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
-            f"4. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
-            "5. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
-            "6. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "7. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
-            "8. Do not return remote URLs, base64, or binary payloads. The client will map asset hints to a local image library.\n"
-            "9. narrative must describe the current situation and risk.\n"
-            "10. All visible text content must be Simplified Chinese.\n"
+            "3. Every interactable must include state with opened, locked, hidden, disabled booleans.\n"
+            "4. Every option must include local_logic. Use null when no local state change is needed.\n"
+            "5. local_logic can only describe same-object logic through requires_state and set_state, using only opened, locked, hidden, disabled.\n"
+            f"6. The client normally spends {ACTION_POINTS_PER_SETTLEMENT} action points before calling you. "
+            "For ongoing scenes, keep enough meaningful interactables and options so the player can usually take several local actions before the next settlement.\n"
+            f"7. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
+            f"8. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
+            "9. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
+            "10. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
+            "11. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
+            "12. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
+            "13. narrative must describe the current situation, risk, and the consequences of this round's actions.\n"
+            "14. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
         payload = {
-            "request_type": "advance_scene" if request.latest_choice else "initial_scene",
+            "request_type": "initial_scene" if request.current_scene is None else "settle_round",
+            "action_point_rule": {
+                "actions_per_settlement": ACTION_POINTS_PER_SETTLEMENT,
+                "client_behavior": (
+                    "The client applies local_logic immediately on the current scene, "
+                    "then calls the model after several actions or when no actions remain."
+                ),
+            },
             "scene_layout": {
                 "coordinate_system": "pixel",
                 "playable_area": {"width": LIVE_WORLD_WIDTH, "height": LIVE_WORLD_HEIGHT},
@@ -197,10 +242,8 @@ class ReverseDetectiveAIClient:
                 ),
             },
             "premise": _premise_to_dict(request.premise),
-            "history": [_history_record_to_dict(item) for item in request.history],
-            "latest_choice": None
-            if request.latest_choice is None
-            else _pending_choice_to_dict(request.latest_choice),
+            "settled_history": [_history_record_to_dict(item) for item in request.history],
+            "recent_actions": [_history_record_to_dict(item) for item in request.recent_actions],
             "current_scene": None
             if request.current_scene is None
             else scene_to_dict(request.current_scene),
@@ -302,39 +345,14 @@ class ReverseDetectiveAIClient:
         if not uses_small_grid:
             return scene
 
-        return load_scene_payload(
-            {
-                "scene": scene_to_dict(scene)["scene"],
-                "npcs": [
-                    {
-                        "id": npc.id,
-                        "name": npc.name,
-                        "image": npc.image,
-                        "position": list(self._scale_point(npc.position)),
-                        "patrol": None
-                        if npc.patrol is None
-                        else [list(self._scale_point(point)) for point in npc.patrol],
-                    }
-                    for npc in scene.npcs
-                ],
-                "interactables": [
-                    {
-                        "id": interactable.id,
-                        "name": interactable.name,
-                        "image": interactable.image,
-                        "position": list(self._scale_point(interactable.position)),
-                        "options": [
-                            {"label": option.label, "action_id": option.action_id}
-                            for option in interactable.options
-                        ],
-                    }
-                    for interactable in scene.interactables
-                ],
-                "narrative": scene.narrative,
-                "game_status": scene.game_status,
-                "ending_text": scene.ending_text,
-            }
-        )
+        payload = scene_to_dict(scene)
+        for npc in payload["npcs"]:
+            npc["position"] = list(self._scale_point(tuple(npc["position"])))
+            if npc["patrol"] is not None:
+                npc["patrol"] = [list(self._scale_point(tuple(point))) for point in npc["patrol"]]
+        for interactable in payload["interactables"]:
+            interactable["position"] = list(self._scale_point(tuple(interactable["position"])))
+        return load_scene_payload(payload)
 
     def _scene_points(self, scene: SceneState) -> list[tuple[int, int]]:
         points: list[tuple[int, int]] = []
@@ -396,12 +414,12 @@ class _MockStoryEngine:
     """Deterministic local story engine used when no live AI is available."""
 
     def generate_scene(self, request: AIRequestPayload) -> SceneState:
-        history = list(request.history)
-        if request.latest_choice is not None:
-            history.append(request.latest_choice.to_record())
+        combined_history = [*request.history, *request.recent_actions]
+        action_ids = {record.action_id for record in combined_history}
+        latest_action = combined_history[-1].action_id if combined_history else None
 
-        action_ids = {record.action_id for record in history}
-        latest_action = None if request.latest_choice is None else request.latest_choice.action_id
+        if request.current_scene is None:
+            return load_scene_payload(self._initial_scene(request.premise))
 
         if latest_action == "execute_clean":
             if {"inspect_clue", "prepare_tool", "prepare_support"}.issubset(action_ids):
@@ -443,83 +461,22 @@ class _MockStoryEngine:
                 )
             )
 
-        narratives = {
-            None: "暴雨压着整座宅邸，你只剩下一次把局势推向终局的机会。",
-            "inspect_clue": "你确认了卷宗里的关键漏洞，时间窗口比想象中更窄。",
-            "prepare_tool": "你已经把主要手段安置到位，只差最后的时机。",
-            "prepare_support": "辅助掩护已经准备完成，现场的可控性明显提升。",
-            "wait": "你暂时按兵不动，观察每个人在房间里的站位变化。",
-            "ignore_clue": "你故意略过卷宗，但风险仍在悄悄累积。",
-            "skip_tool": "你放弃了主手段，后续选择会变得更加危险。",
-            "skip_support": "你没有准备掩护，任何激进行动都会更难收场。",
-        }
-
-        return load_scene_payload(
-            self._ongoing_scene(
-                request.premise,
-                action_ids,
-                narratives.get(latest_action, "局势正在推进，所有人都离真相更近了一步。"),
-            )
+        scene_payload = scene_to_dict(request.current_scene)
+        inside_room = "open_door" in action_ids
+        scene_payload["scene"]["background_image"] = (
+            "mansion_study_room.png" if inside_room else "rainy_villa_hall.png"
         )
-
-    def _ongoing_scene(
-        self,
-        premise: StoryPremise,
-        action_ids: set[str],
-        narrative: str,
-    ) -> dict[str, Any]:
-        clue_done = "inspect_clue" in action_ids
-        tool_done = "prepare_tool" in action_ids
-        support_done = "prepare_support" in action_ids
-
-        interactables: list[dict[str, Any]] = []
-        if not clue_done:
-            interactables.append(
-                self._interactable(
-                    "case_clue",
-                    "卷宗夹",
-                    "case_file.png",
-                    [196, 430],
-                    [("检查线索", "inspect_clue"), ("暂时略过", "ignore_clue")],
-                )
-            )
-        if not tool_done:
-            interactables.append(
-                self._interactable(
-                    "primary_tool",
-                    premise.primary_tool_name,
-                    "tool_case.png",
-                    [634, 356],
-                    [("布置主要手段", "prepare_tool"), ("先不处理", "skip_tool")],
-                )
-            )
-        if not support_done:
-            interactables.append(
-                self._interactable(
-                    "support_tool",
-                    premise.secondary_tool_name,
-                    "support_kit.png",
-                    [1110, 266],
-                    [("准备掩护", "prepare_support"), ("维持现状", "skip_support")],
-                )
-            )
-
-        final_options = [("继续观察", "wait")]
-        if tool_done and support_done and clue_done:
-            final_options.insert(0, ("执行完美方案", "execute_clean"))
-        elif tool_done:
-            final_options.insert(0, ("冒险提前动手", "execute_risky"))
-
-        interactables.append(
-            self._interactable(
-                "target_window",
-                "视线盲区",
-                "window.png",
-                [1006, 404],
-                final_options,
-            )
+        scene_payload["scene"]["description"] = (
+            f"{request.premise.story_title} · 书房内"
+            if inside_room
+            else f"{request.premise.story_title} · 当前行动阶段"
         )
+        scene_payload["narrative"] = self._narrative_for_round(latest_action)
+        scene_payload["game_status"] = "ongoing"
+        scene_payload["ending_text"] = None
+        return load_scene_payload(scene_payload)
 
+    def _initial_scene(self, premise: StoryPremise) -> dict[str, Any]:
         return {
             "scene": {
                 "background_image": "rainy_villa_hall.png",
@@ -549,8 +506,115 @@ class _MockStoryEngine:
                     "patrol": [[612, 206], [708, 224]],
                 },
             ],
-            "interactables": interactables,
-            "narrative": narrative,
+            "interactables": [
+                self._interactable(
+                    interactable_id="case_clue",
+                    name="卷宗夹",
+                    image="case_file.png",
+                    position=[196, 430],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "检查线索",
+                            "inspect_clue",
+                            requires={},
+                            set_state={"opened": True, "disabled": True},
+                            success_text="你翻开卷宗，确认了关键时间差。",
+                        ),
+                        self._option("暂时略过", "ignore_clue"),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="primary_tool",
+                    name=premise.primary_tool_name,
+                    image="tool_case.png",
+                    position=[634, 356],
+                    state={"opened": False, "locked": True, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "解开工具包",
+                            "unlock_tool",
+                            requires={"locked": True},
+                            set_state={"locked": False},
+                            success_text="你悄悄解开了工具包的锁扣。",
+                            failure_text="工具包已经打开过了。",
+                        ),
+                        self._option(
+                            "布置主要手段",
+                            "prepare_tool",
+                            requires={"locked": False, "disabled": False},
+                            set_state={"opened": True, "disabled": True},
+                            success_text="你已经把主要手段安置到位。",
+                            failure_text="现在还没法正式布置主手段。",
+                        ),
+                        self._option("先不处理", "skip_tool"),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="support_tool",
+                    name=premise.secondary_tool_name,
+                    image="support_kit.png",
+                    position=[1110, 266],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "打开掩护包",
+                            "open_support",
+                            requires={"opened": False},
+                            set_state={"opened": True},
+                            success_text="你把掩护工具摊开，开始核对细节。",
+                        ),
+                        self._option(
+                            "准备掩护",
+                            "prepare_support",
+                            requires={"opened": True, "disabled": False},
+                            set_state={"disabled": True},
+                            success_text="辅助掩护已经准备完成。",
+                            failure_text="先打开掩护包再安排掩护。",
+                        ),
+                        self._option("维持现状", "skip_support"),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="study_door",
+                    name="书房门",
+                    image="locked_door.png",
+                    position=[836, 210],
+                    state={"opened": False, "locked": True, "hidden": False, "disabled": False},
+                    options=[
+                        self._option("检查门锁", "inspect_lock"),
+                        self._option(
+                            "撬开门锁",
+                            "unlock_door",
+                            requires={"locked": True},
+                            set_state={"locked": False},
+                            success_text="门锁轻轻弹开了一格。",
+                            failure_text="这扇门现在不需要再撬。",
+                        ),
+                        self._option(
+                            "推开房门",
+                            "open_door",
+                            requires={"locked": False, "opened": False},
+                            set_state={"opened": True},
+                            success_text="你推开书房门，里面比想象中更安静。",
+                            failure_text="先解开门锁，或者这扇门已经开了。",
+                        ),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="target_window",
+                    name="视线盲区",
+                    image="window.png",
+                    position=[1006, 404],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option("继续观察", "wait"),
+                        self._option("执行完美方案", "execute_clean"),
+                        self._option("冒险提前动手", "execute_risky"),
+                    ],
+                ),
+            ],
+            "narrative": "暴雨压着整座宅邸，你必须先在本地行动点里做好准备，再等待系统结算这轮选择。",
             "game_status": "ongoing",
             "ending_text": None,
         }
@@ -596,15 +660,63 @@ class _MockStoryEngine:
         name: str,
         image: str,
         position: list[int],
-        options: list[tuple[str, str]],
+        state: dict[str, bool],
+        options: list[dict[str, Any]],
     ) -> dict[str, Any]:
         return {
             "id": interactable_id,
             "name": name,
             "image": image,
             "position": position,
-            "options": [{"label": label, "action_id": action_id} for label, action_id in options],
+            "state": state,
+            "options": options,
         }
+
+    def _option(
+        self,
+        label: str,
+        action_id: str,
+        requires: dict[str, bool] | None = None,
+        set_state: dict[str, bool] | None = None,
+        success_text: str | None = None,
+        failure_text: str | None = None,
+    ) -> dict[str, Any]:
+        local_logic = None
+        if (
+            requires is not None
+            or set_state is not None
+            or success_text is not None
+            or failure_text is not None
+        ):
+            local_logic = {
+                "requires_state": requires or {},
+                "set_state": set_state or {},
+                "success_text": success_text,
+                "failure_text": failure_text,
+            }
+        return {
+            "label": label,
+            "action_id": action_id,
+            "local_logic": local_logic,
+        }
+
+    def _narrative_for_round(self, latest_action: str | None) -> str:
+        narratives = {
+            None: "暴雨压着整座宅邸，你只剩下一次把局势推向终局的机会。",
+            "inspect_clue": "你确认了卷宗里的关键漏洞，时间窗口比想象中更窄。",
+            "unlock_tool": "你先把工具包解开，为真正的布置争取了余地。",
+            "prepare_tool": "你已经把主要手段安置到位，只差最后的时机。",
+            "open_support": "掩护工具已经摊开，你开始安排更稳妥的退路。",
+            "prepare_support": "辅助掩护已经准备完成，现场的可控性明显提升。",
+            "inspect_lock": "你重新确认了门锁状态，心里对时机更有把握。",
+            "unlock_door": "门锁已经被你处理过，下一步能更安静地进入书房。",
+            "open_door": "书房门被悄悄推开，空气里有一丝不正常的安静。",
+            "wait": "你暂时按兵不动，观察每个人在房间里的站位变化。",
+            "ignore_clue": "你故意略过卷宗，但风险仍在悄悄累积。",
+            "skip_tool": "你放弃了主手段，后续选择会变得更加危险。",
+            "skip_support": "你没有准备掩护，任何激进行动都会更难收场。",
+        }
+        return narratives.get(latest_action, "局势正在推进，所有人都离真相更近了一步。")
 
 
 def _history_record_to_dict(record: ActionRecord) -> dict[str, Any]:
@@ -614,16 +726,6 @@ def _history_record_to_dict(record: ActionRecord) -> dict[str, Any]:
         "interactable_name": record.interactable_name,
         "label": record.label,
         "action_id": record.action_id,
-    }
-
-
-def _pending_choice_to_dict(choice: PendingChoice) -> dict[str, Any]:
-    return {
-        "turn_index": choice.turn_index,
-        "interactable_id": choice.interactable_id,
-        "interactable_name": choice.interactable_name,
-        "label": choice.label,
-        "action_id": choice.action_id,
     }
 
 

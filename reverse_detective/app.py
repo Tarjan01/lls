@@ -19,7 +19,7 @@ from reverse_detective.config import (
     save_api_key,
     save_config,
 )
-from reverse_detective.game_state import GameSessionState, PendingChoice
+from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import (
     GameBackgroundDefinition,
     Interactable,
@@ -337,7 +337,14 @@ class GameApp:
             self._submit_initial_request()
             return
 
-        if self._mode != "game" or self._session is None or self._session.loading:
+        if self._mode != "game" or self._session is None:
+            return
+
+        if key == pygame.K_t and self._session.can_force_settle:
+            self._submit_settlement_request()
+            return
+
+        if self._session.loading or self._session.current_scene.is_terminal or self._session.needs_settlement:
             return
 
         if key == pygame.K_UP:
@@ -351,14 +358,18 @@ class GameApp:
         if key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
             choice = self._session.choose_option_by_index(self._session.selected_option_index)
             if choice is not None:
-                self._submit_action_request(choice)
+                resolution = self._session.apply_choice(choice)
+                if resolution.should_settle:
+                    self._submit_settlement_request()
             return
 
         if pygame.K_1 <= key <= pygame.K_9:
             option_index = key - pygame.K_1
             choice = self._session.choose_option_by_index(option_index)
             if choice is not None:
-                self._submit_action_request(choice)
+                resolution = self._session.apply_choice(choice)
+                if resolution.should_settle:
+                    self._submit_settlement_request()
 
     def _update_movement(self, delta_time: float) -> None:
         if self._mode != "game" or self._session is None:
@@ -409,13 +420,17 @@ class GameApp:
             if result.kind == "initial":
                 self._session.finish_initial_scene(result.scene)
             else:
-                self._session.finish_action(result.scene)
+                self._session.finish_settlement(result.scene)
 
     def _update_active_interactable(self) -> None:
         if self._mode != "game" or self._session is None:
             return
 
-        if self._session.loading or self._session.current_scene.is_terminal:
+        if (
+            self._session.loading
+            or self._session.current_scene.is_terminal
+            or self._session.needs_settlement
+        ):
             self._session.set_active_interactable(None)
             return
 
@@ -423,6 +438,9 @@ class GameApp:
         best_match: tuple[float, str] | None = None
 
         for interactable in self._session.current_scene.interactables:
+            if not self._session.available_options_for(interactable):
+                continue
+
             trigger_rect = self._trigger_rect(interactable)
             if not player_rect.colliderect(trigger_rect):
                 continue
@@ -456,7 +474,7 @@ class GameApp:
         self._request_serial += 1
         request_id = self._request_serial
         self._session.reset_for_restart()
-        self._session.begin_action()
+        self._session.begin_initial_load()
         premise_snapshot = self._premise
         worker = threading.Thread(
             target=self._run_initial_request,
@@ -465,19 +483,31 @@ class GameApp:
         )
         worker.start()
 
-    def _submit_action_request(self, choice: PendingChoice) -> None:
-        if self._session is None or self._premise is None or self._session.loading:
+    def _submit_settlement_request(self) -> None:
+        if (
+            self._session is None
+            or self._premise is None
+            or self._session.loading
+            or not self._session.round_actions
+        ):
             return
 
         self._request_serial += 1
         request_id = self._request_serial
-        history_snapshot = list(self._session.action_history)
+        settled_history_snapshot = list(self._session.settled_action_history)
+        round_actions_snapshot = list(self._session.round_actions)
         scene_snapshot = self._session.current_scene
         premise_snapshot = self._premise
-        self._session.begin_action(choice)
+        self._session.begin_settlement()
         worker = threading.Thread(
-            target=self._run_action_request,
-            args=(request_id, premise_snapshot, history_snapshot, scene_snapshot, choice),
+            target=self._run_settlement_request,
+            args=(
+                request_id,
+                premise_snapshot,
+                settled_history_snapshot,
+                round_actions_snapshot,
+                scene_snapshot,
+            ),
             daemon=True,
         )
         worker.start()
@@ -498,31 +528,31 @@ class GameApp:
                 )
             )
 
-    def _run_action_request(
+    def _run_settlement_request(
         self,
         request_id: int,
         premise: StoryPremise,
-        history_snapshot: list,
+        settled_history_snapshot: list,
+        round_actions_snapshot: list,
         scene_snapshot: SceneState,
-        choice: PendingChoice,
     ) -> None:
         try:
-            scene = self._ai_client.generate_next_scene(
+            scene = self._ai_client.settle_round(
                 premise,
                 scene_snapshot,
-                history_snapshot,
-                choice,
+                settled_history_snapshot,
+                round_actions_snapshot,
             )
             self._result_queue.put(
-                WorkerResult(request_id=request_id, kind="action", scene=scene, error=None)
+                WorkerResult(request_id=request_id, kind="settlement", scene=scene, error=None)
             )
         except (AIClientError, Exception) as exc:
             self._result_queue.put(
                 WorkerResult(
                     request_id=request_id,
-                    kind="action",
+                    kind="settlement",
                     scene=None,
-                    error=f"推进场景失败: {exc}",
+                    error=f"结算回合失败: {exc}",
                 )
             )
 
@@ -631,8 +661,8 @@ class GameApp:
                     f"现场设定：{story.setting}",
                     f"核心案情：{story.core_case}",
                     f"开场钩子：{story.opening_hook}",
-                    f"死者：{story.victim_name}，{story.victim_identity}",
-                    f"追查者：{story.detective_name}，{story.detective_identity}",
+                    f"死者：{story.victim_name}｜{story.victim_identity}",
+                    f"追查者：{story.detective_name}｜{story.detective_identity}",
                     "评分段位："
                     + " / ".join(f"{rank.rank}（{rank.score_range}）" for rank in story.rankings),
                 ),
@@ -649,7 +679,7 @@ class GameApp:
                 f"动机：{role.motive}",
                 f"隐藏目标：{role.hidden_objective}",
                 "特殊条件：" + "；".join(role.special_conditions),
-                *(f"招牌工具：{tool.name}，{tool.description}" for tool in role.signature_tools),
+                *(f"招牌工具：{tool.name}｜{tool.description}" for tool in role.signature_tools),
             ),
             footer="Enter / Space / Esc 关闭详情",
         )

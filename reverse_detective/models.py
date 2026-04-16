@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field, replace
+from typing import Literal, Mapping
 
 GameStatus = Literal["ongoing", "player_win", "player_lose", "special_ending"]
 Point = tuple[int, int]
@@ -18,9 +18,46 @@ class SceneBackdrop:
 
 
 @dataclass(frozen=True, slots=True)
+class InteractableState:
+    opened: bool = False
+    locked: bool = False
+    hidden: bool = False
+    disabled: bool = False
+
+    def matches(self, expected: Mapping[str, bool]) -> bool:
+        for key, value in expected.items():
+            if getattr(self, key) != value:
+                return False
+        return True
+
+    def updated(self, changes: Mapping[str, bool]) -> "InteractableState":
+        state = self
+        for key, value in changes.items():
+            state = replace(state, **{key: value})
+        return state
+
+    def to_dict(self) -> dict[str, bool]:
+        return {
+            "opened": self.opened,
+            "locked": self.locked,
+            "hidden": self.hidden,
+            "disabled": self.disabled,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ActionLocalLogic:
+    requires_state: dict[str, bool] = field(default_factory=dict)
+    set_state: dict[str, bool] = field(default_factory=dict)
+    success_text: str | None = None
+    failure_text: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ActionOption:
     label: str
     action_id: str
+    local_logic: ActionLocalLogic | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +76,7 @@ class Interactable:
     image: str
     position: Point
     options: tuple[ActionOption, ...]
+    state: InteractableState = field(default_factory=InteractableState)
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,7 +215,7 @@ def build_loading_scene(narrative: str = "案件生成中，请稍候。") -> Sc
         scene=SceneBackdrop(
             background_image="placeholder_loading.png",
             bgm="silence.mp3",
-            description="昏暗的宅邸在雨声中等待下一步变化。",
+            description="昏暗的宅邸在雨声里等待下一步变化。",
         ),
         npcs=(),
         interactables=(),

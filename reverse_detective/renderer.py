@@ -10,7 +10,7 @@ from typing import Any
 import pygame
 
 from reverse_detective.game_state import GameSessionState
-from reverse_detective.models import Interactable, NPC, SceneState
+from reverse_detective.models import ActionOption, Interactable, NPC, SceneState
 from reverse_detective.utils.assets import DEFAULT_ASSET_CACHE_ROOT, resolve_cached_asset_path
 from reverse_detective.utils.text import clamp_lines, wrap_text
 
@@ -97,14 +97,26 @@ class Renderer:
         self._draw_world(scene, session, elapsed_seconds, player_label)
         self._draw_hud(scene, session, mode_label, story_title)
 
-        if session.active_interactable is not None and not session.loading and not scene.is_terminal:
-            self._draw_option_popup(session.active_interactable, session.selected_option_index)
+        active_interactable = session.active_interactable
+        if (
+            active_interactable is not None
+            and not session.loading
+            and not scene.is_terminal
+            and not session.needs_settlement
+        ):
+            options = session.available_options_for(active_interactable)
+            if options:
+                self._draw_option_popup(
+                    active_interactable,
+                    options,
+                    session.selected_option_index,
+                )
 
         if session.error_message:
             self._draw_error_banner(session.error_message)
 
         if session.loading:
-            self._draw_loading_overlay(mode_label)
+            self._draw_loading_overlay(session, mode_label)
 
         if scene.is_terminal and scene.ending_text:
             self._draw_ending_overlay(scene.ending_text)
@@ -116,6 +128,8 @@ class Renderer:
             "background",
             scene.scene.background_image,
             (self._width, self._play_area_height),
+            scene.scene.description,
+            scene.narrative,
         )
         if background_surface is not None:
             self._surface.blit(background_surface, (0, 0))
@@ -148,7 +162,9 @@ class Renderer:
             self._draw_npc(npc, elapsed_seconds)
 
         for interactable in scene.interactables:
-            active = session.active_interactable_id == interactable.id
+            if interactable.state.hidden:
+                continue
+            active = session.active_interactable_id == interactable.id and not session.needs_settlement
             self._draw_interactable(interactable, active)
 
         self._draw_player(session.player_position, player_label)
@@ -159,7 +175,7 @@ class Renderer:
         shadow_rect = pygame.Rect(x - 30, y + 58, 60, 18)
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
-        sprite = self._load_asset_surface("npc", npc.image, (132, 132))
+        sprite = self._load_asset_surface("npc", npc.image, (132, 132), npc.id, npc.name)
         if sprite is not None:
             sprite_rect = sprite.get_rect(midbottom=(x, y + 42))
             self._surface.blit(sprite, sprite_rect)
@@ -185,7 +201,15 @@ class Renderer:
             self._surface.blit(glow_surface, (x - 48, y - 48))
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
-        sprite = self._load_asset_surface("interactable", interactable.image, (82, 82))
+        option_labels = " ".join(option.label for option in interactable.options)
+        sprite = self._load_asset_surface(
+            "interactable",
+            interactable.image,
+            (82, 82),
+            interactable.id,
+            interactable.name,
+            option_labels,
+        )
         if sprite is not None:
             sprite_rect = sprite.get_rect(midbottom=(x, y + 30))
             self._surface.blit(sprite, sprite_rect)
@@ -220,7 +244,13 @@ class Renderer:
     ) -> None:
         hud_rect = pygame.Rect(0, self._hud_top, self._width, self._height - self._hud_top)
         pygame.draw.rect(self._surface, (13, 16, 23), hud_rect)
-        pygame.draw.line(self._surface, (72, 83, 103), (0, self._hud_top), (self._width, self._hud_top), width=2)
+        pygame.draw.line(
+            self._surface,
+            (72, 83, 103),
+            (0, self._hud_top),
+            (self._width, self._hud_top),
+            width=2,
+        )
 
         self._blit_lines(
             [f"场景: {scene.scene.description}"],
@@ -236,24 +266,60 @@ class Renderer:
             line_gap=6,
         )
 
+        if session.local_message:
+            self._blit_lines(
+                ["本地反馈："] + wrap_text(session.local_message, self._small_font, 760),
+                self._small_font,
+                (36, self._hud_top + 150),
+                (237, 221, 189),
+                line_gap=5,
+            )
+
         summary_lines = [
             f"案件: {story_title}",
             f"模式: {mode_label}",
             f"状态: {scene.game_status}",
+            f"行动点: {session.remaining_action_points}/{session.action_points_per_round}",
+            f"本轮待结算: {len(session.round_actions)}",
             "控制: WASD 移动",
             "交互: 上下切选项，Enter/Space 确认",
-            "快捷: 数字键 1-9 直接选项，R 重开，M 返回菜单，Esc 退出",
+            "快捷: 数字键 1-9 直接选项，T 提前结算/重试，R 重开，M 返回菜单，Esc 退出",
         ]
         self._blit_lines(summary_lines, self._small_font, (870, self._hud_top + 30), (197, 205, 219))
 
-        history_lines = ["操作记录:"]
-        for record in session.action_history[-4:]:
-            history_lines.append(f"{record.turn_index}. {record.label}")
-        self._blit_lines(history_lines, self._small_font, (870, self._hud_top + 140), (237, 221, 189))
+        round_lines = ["本轮行动:"]
+        if session.round_actions:
+            for record in session.round_actions[-5:]:
+                round_lines.append(f"{record.turn_index}. {record.label}")
+        else:
+            round_lines.append("尚未消耗行动点")
+        self._blit_lines(round_lines, self._small_font, (870, self._hud_top + 190), (237, 221, 189))
 
-    def _draw_option_popup(self, interactable: Interactable, selected_index: int) -> None:
-        popup_width = 360
-        popup_height = 56 + len(interactable.options) * 40
+        settled_lines = ["已结算记录:"]
+        if session.settled_action_history:
+            for record in session.settled_action_history[-4:]:
+                settled_lines.append(f"{record.turn_index}. {record.label}")
+        else:
+            settled_lines.append("暂无")
+        self._blit_lines(
+            settled_lines,
+            self._small_font,
+            (1060, self._hud_top + 190),
+            (215, 219, 228),
+        )
+
+        if session.needs_settlement and not session.loading and not scene.is_terminal:
+            hint = self._small_font.render("本轮行动点已耗尽，按 T 立即结算。", True, (238, 199, 132))
+            self._surface.blit(hint, (36, self._height - 36))
+
+    def _draw_option_popup(
+        self,
+        interactable: Interactable,
+        options: tuple[ActionOption, ...],
+        selected_index: int,
+    ) -> None:
+        popup_width = 400
+        popup_height = 56 + len(options) * 40
         popup_rect = pygame.Rect(self._width - popup_width - 28, 26, popup_width, popup_height)
         pygame.draw.rect(self._surface, (12, 16, 24), popup_rect, border_radius=18)
         pygame.draw.rect(self._surface, (120, 135, 166), popup_rect, width=2, border_radius=18)
@@ -261,7 +327,7 @@ class Renderer:
         title = self._title_font.render(interactable.name, True, (245, 236, 222))
         self._surface.blit(title, (popup_rect.x + 22, popup_rect.y + 18))
 
-        for index, option in enumerate(interactable.options):
+        for index, option in enumerate(options):
             option_rect = pygame.Rect(
                 popup_rect.x + 18,
                 popup_rect.y + 56 + index * 38,
@@ -275,15 +341,27 @@ class Renderer:
             label = self._body_font.render(f"{index + 1}. {option.label}", True, text_color)
             self._surface.blit(label, (option_rect.x + 12, option_rect.y + 5))
 
-    def _draw_loading_overlay(self, mode_label: str) -> None:
+    def _draw_loading_overlay(self, session: GameSessionState, mode_label: str) -> None:
         overlay = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
         overlay.fill((8, 10, 15, 150))
         self._surface.blit(overlay, (0, 0))
 
-        text = self._title_font.render("AI 正在生成下一幕……", True, (245, 240, 228))
+        title_text = (
+            "AI 正在生成初始场景…"
+            if not session.round_actions and not session.settled_action_history
+            else "AI 正在结算本轮行动…"
+        )
+        subtitle_text = (
+            "将根据本轮行动点刷新场景与裁决结果。"
+            if session.round_actions
+            else "正在加载本局的初始空间布局与角色状态。"
+        )
+        text = self._title_font.render(title_text, True, (245, 240, 228))
         mode = self._body_font.render(f"当前模式: {mode_label}", True, (219, 224, 234))
-        self._surface.blit(text, (self._width // 2 - text.get_width() // 2, 180))
-        self._surface.blit(mode, (self._width // 2 - mode.get_width() // 2, 226))
+        hint = self._small_font.render(subtitle_text, True, (228, 211, 182))
+        self._surface.blit(text, (self._width // 2 - text.get_width() // 2, 170))
+        self._surface.blit(mode, (self._width // 2 - mode.get_width() // 2, 216))
+        self._surface.blit(hint, (self._width // 2 - hint.get_width() // 2, 250))
 
     def _draw_ending_overlay(self, ending_text: str) -> None:
         overlay = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
@@ -306,7 +384,8 @@ class Renderer:
         banner_rect = pygame.Rect(24, 18, self._width - 48, 46)
         pygame.draw.rect(self._surface, (134, 34, 30), banner_rect, border_radius=12)
         pygame.draw.rect(self._surface, (255, 196, 184), banner_rect, width=2, border_radius=12)
-        text = self._small_font.render(message, True, (255, 242, 236))
+        preview = self._fit_text(message, self._small_font, banner_rect.width - 28)
+        text = self._small_font.render(preview, True, (255, 242, 236))
         self._surface.blit(text, (banner_rect.x + 14, banner_rect.y + 13))
 
     def _load_asset_surface(
@@ -314,8 +393,9 @@ class Renderer:
         asset_kind: str,
         asset_ref: str,
         size: tuple[int, int],
+        *hint_texts: str,
     ) -> pygame.Surface | None:
-        asset_path = resolve_cached_asset_path(asset_kind, asset_ref, self._asset_root)
+        asset_path = resolve_cached_asset_path(asset_kind, asset_ref, self._asset_root, *hint_texts)
         if asset_path is None or not asset_path.is_file():
             return None
 
@@ -370,6 +450,15 @@ class Renderer:
     def _draw_label(self, text: str, position: tuple[int, int], color: Color) -> None:
         label = self._small_font.render(text, True, color)
         self._surface.blit(label, (position[0] - label.get_width() // 2, position[1]))
+
+    def _fit_text(self, text: str, font: Any, max_width: int) -> str:
+        if max_width <= 0 or font.size(text)[0] <= max_width:
+            return text
+
+        candidate = text
+        while candidate and font.size(candidate + "...")[0] > max_width:
+            candidate = candidate[:-1]
+        return (candidate or "") + "..."
 
     def _blit_lines(
         self,
