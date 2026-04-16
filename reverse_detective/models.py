@@ -57,12 +57,97 @@ class SceneState:
 
 @dataclass(frozen=True, slots=True)
 class StoryPremise:
+    story_id: str
+    story_title: str
+    story_subtitle: str
+    simulation_operator_name: str
+    simulation_background: str
+    player_role_id: str
+    player_role_name: str
+    player_display_name: str
     player_identity: str
+    player_strategy_kind: str
     victim_identity: str
+    victim_name: str
     detective_identity: str
+    detective_name: str
     setting: str
     motive: str
     initial_goal: str
+    hidden_objective: str
+    opening_hook: str
+    primary_tool_name: str
+    secondary_tool_name: str
+
+
+@dataclass(frozen=True, slots=True)
+class StoryTool:
+    name: str
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class StoryRole:
+    id: str
+    title: str
+    name: str
+    background: str
+    motive: str
+    special_conditions: tuple[str, ...]
+    signature_tools: tuple[StoryTool, ...]
+    hidden_objective: str
+    strategy_kind: str
+
+    @property
+    def display_name(self) -> str:
+        return f"{self.title}·{self.name}"
+
+    @property
+    def primary_tool_name(self) -> str:
+        return self.signature_tools[0].name
+
+    @property
+    def secondary_tool_name(self) -> str:
+        if len(self.signature_tools) >= 2:
+            return self.signature_tools[1].name
+        return self.signature_tools[0].name
+
+
+@dataclass(frozen=True, slots=True)
+class StoryRule:
+    title: str
+    description: str
+    score_delta: int
+
+
+@dataclass(frozen=True, slots=True)
+class StoryRanking:
+    rank: str
+    score_range: str
+    description: str
+
+
+@dataclass(frozen=True, slots=True)
+class StoryDefinition:
+    id: str
+    title: str
+    subtitle: str
+    simulation_operator_name: str
+    simulation_background: str
+    simulation_briefing: str
+    location: str
+    setting: str
+    core_case: str
+    opening_hook: str
+    victim_name: str
+    victim_identity: str
+    detective_name: str
+    detective_identity: str
+    roles: tuple[StoryRole, ...]
+    base_score: int
+    evidence_penalties: tuple[StoryRule, ...]
+    task_bonuses: tuple[StoryRule, ...]
+    rankings: tuple[StoryRanking, ...]
 
 
 @dataclass(frozen=True, slots=True)
