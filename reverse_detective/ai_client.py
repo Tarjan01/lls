@@ -217,7 +217,7 @@ class ReverseDetectiveAIClient:
         return None
 
 
-def build_default_premise() -> StoryPremise:
+def _legacy_build_default_premise() -> StoryPremise:
     """Return the default demo premise used by both mock and live modes."""
 
     return StoryPremise(
@@ -230,7 +230,7 @@ def build_default_premise() -> StoryPremise:
     )
 
 
-class _MockStoryEngine:
+class _LegacyMockStoryEngine:
     """Deterministic local story engine used when no live AI is available."""
 
     def generate_scene(self, request: AIRequestPayload) -> SceneState:
@@ -525,7 +525,7 @@ class _MockStoryEngine:
         }
 
 
-def _premise_to_dict(premise: StoryPremise) -> dict[str, str]:
+def _legacy_premise_to_dict(premise: StoryPremise) -> dict[str, str]:
     return {
         "player_identity": premise.player_identity,
         "victim_identity": premise.victim_identity,
