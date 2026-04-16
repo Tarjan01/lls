@@ -353,3 +353,44 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
     assert scene.npcs[0].position == (509, 371)
     assert scene.npcs[0].patrol == ((509, 371), (662, 358), (749, 383))
     assert scene.interactables[0].position == (988, 340)
+
+
+def test_consume_response_stream_does_not_require_response_completed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=True,
+            fallback_to_mock_on_error=True,
+            credentials_path=tmp_path / "credentials.json",
+        )
+    )
+
+    monkeypatch.setattr(client, "_try_parse_streamed_scene", lambda _: None)
+
+    class FakeEvent:
+        type = "response.output_text.delta"
+
+        def __init__(self, delta: str):
+            self.delta = delta
+
+    class FakeStream:
+        def __iter__(self):
+            yield FakeEvent('{"scene":')
+            yield FakeEvent(' {"description": "partial"}}')
+
+        def get_final_response(self):
+            raise AssertionError("get_final_response should not be required")
+
+    streamed_scene, response, streamed_text = client._consume_response_stream(FakeStream())
+
+    assert streamed_scene is None
+    assert response is None
+    assert streamed_text == '{"scene": {"description": "partial"}}'

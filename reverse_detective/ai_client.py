@@ -208,6 +208,7 @@ class ReverseDetectiveAIClient:
 
     def _consume_response_stream(self, stream: Any) -> tuple[SceneState | None, Any, str]:
         chunks: list[str] = []
+        completed_response: Any = None
         for event in stream:
             event_type = getattr(event, "type", None)
             if event_type == "response.output_text.delta":
@@ -221,9 +222,16 @@ class ReverseDetectiveAIClient:
                 continue
 
             if event_type == "response.output_text.done":
-                return None, None, "".join(chunks)
+                final_text = getattr(event, "text", None)
+                if isinstance(final_text, str) and final_text and not chunks:
+                    chunks.append(final_text)
+                continue
 
-        return None, stream.get_final_response(), "".join(chunks)
+            if event_type == "response.completed":
+                completed_response = getattr(event, "response", None)
+                continue
+
+        return None, completed_response, "".join(chunks)
 
     def _extract_response_content(self, response: Any, streamed_text: str = "") -> str:
         if streamed_text.strip():
