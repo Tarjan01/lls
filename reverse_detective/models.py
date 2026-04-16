@@ -62,6 +62,7 @@ class StoryPremise:
     story_subtitle: str
     simulation_operator_name: str
     simulation_background: str
+    simulation_briefing: str
     player_role_id: str
     player_role_name: str
     player_display_name: str
@@ -125,6 +126,16 @@ class StoryRanking:
     rank: str
     score_range: str
     description: str
+
+
+@dataclass(frozen=True, slots=True)
+class GameBackgroundDefinition:
+    game_title: str
+    game_subtitle: str
+    operator_name: str
+    background: str
+    briefing: str
+    menu_intro: str
 
 
 @dataclass(frozen=True, slots=True)

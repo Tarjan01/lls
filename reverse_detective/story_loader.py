@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from reverse_detective.models import (
+    GameBackgroundDefinition,
     StoryDefinition,
     StoryPremise,
     StoryRanking,
@@ -18,6 +19,7 @@ from reverse_detective.models import (
 
 
 DEFAULT_STORIES_DIR = Path("stories")
+BACKGROUND_FILE_NAME = "game_background.json"
 
 
 class StoryValidationError(ValueError):
@@ -31,17 +33,57 @@ def load_story_catalog(stories_dir: Path | None = None) -> tuple[StoryDefinition
     if not root.exists():
         raise StoryValidationError(f"Stories directory does not exist: {root}")
 
-    story_files = sorted(path for path in root.glob("*.json") if path.is_file())
+    background = load_game_background(root / BACKGROUND_FILE_NAME)
+    story_files = sorted(
+        path
+        for path in root.glob("*.json")
+        if path.is_file() and path.name != BACKGROUND_FILE_NAME
+    )
     if not story_files:
         raise StoryValidationError(f"No story JSON files found in: {root}")
 
-    stories = tuple(load_story_definition(path) for path in story_files)
+    stories = tuple(load_story_definition(path, background) for path in story_files)
     if len({story.id for story in stories}) != len(stories):
         raise StoryValidationError("Story ids must be unique across the story catalog.")
     return stories
 
 
-def load_story_definition(path: Path) -> StoryDefinition:
+def load_game_background(path: Path | None = None) -> GameBackgroundDefinition:
+    """Load the global game background used by all dossiers."""
+
+    background_path = path or (DEFAULT_STORIES_DIR / BACKGROUND_FILE_NAME)
+    try:
+        raw_payload = json.loads(background_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise StoryValidationError(f"Game background file was not found: {background_path}") from exc
+    except json.JSONDecodeError as exc:
+        raise StoryValidationError(f"Invalid JSON in {background_path}: {exc.msg}") from exc
+
+    payload = _require_mapping(raw_payload, str(background_path))
+    _require_exact_keys(
+        payload,
+        {"game_title", "game_subtitle", "operator_name", "background", "briefing", "menu_intro"},
+        str(background_path),
+    )
+
+    return GameBackgroundDefinition(
+        game_title=_require_non_empty_string(payload["game_title"], f"{background_path}.game_title"),
+        game_subtitle=_require_non_empty_string(
+            payload["game_subtitle"], f"{background_path}.game_subtitle"
+        ),
+        operator_name=_require_non_empty_string(
+            payload["operator_name"], f"{background_path}.operator_name"
+        ),
+        background=_require_non_empty_string(payload["background"], f"{background_path}.background"),
+        briefing=_require_non_empty_string(payload["briefing"], f"{background_path}.briefing"),
+        menu_intro=_require_non_empty_string(payload["menu_intro"], f"{background_path}.menu_intro"),
+    )
+
+
+def load_story_definition(
+    path: Path,
+    background: GameBackgroundDefinition | None = None,
+) -> StoryDefinition:
     """Load and validate one story JSON file."""
 
     try:
@@ -54,16 +96,10 @@ def load_story_definition(path: Path) -> StoryDefinition:
     payload = _require_mapping(raw_payload, str(path))
     _require_exact_keys(
         payload,
-        {"id", "title", "subtitle", "game_frame", "case", "roles", "scoring", "rankings"},
+        {"id", "title", "subtitle", "case", "roles", "scoring", "rankings"},
         str(path),
     )
-
-    game_frame = _require_mapping(payload["game_frame"], f"{path}.game_frame")
-    _require_exact_keys(
-        game_frame,
-        {"operator_name", "background", "briefing"},
-        f"{path}.game_frame",
-    )
+    game_background = background or load_game_background(path.parent / BACKGROUND_FILE_NAME)
 
     case_data = _require_mapping(payload["case"], f"{path}.case")
     _require_exact_keys(
@@ -115,15 +151,9 @@ def load_story_definition(path: Path) -> StoryDefinition:
         id=_require_non_empty_string(payload["id"], f"{path}.id"),
         title=_require_non_empty_string(payload["title"], f"{path}.title"),
         subtitle=_require_non_empty_string(payload["subtitle"], f"{path}.subtitle"),
-        simulation_operator_name=_require_non_empty_string(
-            game_frame["operator_name"], f"{path}.game_frame.operator_name"
-        ),
-        simulation_background=_require_non_empty_string(
-            game_frame["background"], f"{path}.game_frame.background"
-        ),
-        simulation_briefing=_require_non_empty_string(
-            game_frame["briefing"], f"{path}.game_frame.briefing"
-        ),
+        simulation_operator_name=game_background.operator_name,
+        simulation_background=game_background.background,
+        simulation_briefing=game_background.briefing,
         location=_require_non_empty_string(case_data["location"], f"{path}.case.location"),
         setting=_require_non_empty_string(case_data["setting"], f"{path}.case.setting"),
         core_case=_require_non_empty_string(case_data["core_case"], f"{path}.case.core_case"),
@@ -166,6 +196,7 @@ def build_story_premise(story: StoryDefinition, role_id: str | None = None) -> S
         story_subtitle=story.subtitle,
         simulation_operator_name=story.simulation_operator_name,
         simulation_background=story.simulation_background,
+        simulation_briefing=story.simulation_briefing,
         player_role_id=role.id,
         player_role_name=role.display_name,
         player_display_name=role.name,

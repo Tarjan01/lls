@@ -221,12 +221,28 @@ def _legacy_build_default_premise() -> StoryPremise:
     """Return the default demo premise used by both mock and live modes."""
 
     return StoryPremise(
+        story_id="legacy_demo_case",
+        story_title="山庄遗产说明会",
+        story_subtitle="旧版本地 mock 剧本",
+        simulation_operator_name="江川",
+        simulation_background="江川通过扮演凶手来倒推现实案件的破局点。",
+        simulation_briefing="玩家以嫌疑人身份进入案件发生前的最后时段，尝试重演凶案。",
+        player_role_id="legacy_secretary",
+        player_role_name="私人秘书林岚",
+        player_display_name="林岚",
         player_identity="你是赵公馆的私人秘书林岚，擅长维持体面，也擅长隐藏自己的真实意图。",
+        player_strategy_kind="social",
         victim_identity="赵公馆主人赵铭刚发现你挪用了公馆修缮基金，准备在今晚的遗产说明会上公开账本。",
+        victim_name="赵铭",
         detective_identity="侦探顾闻舟以顾问身份受邀到场，正在观察每个人的情绪和站位。",
+        detective_name="顾闻舟",
         setting="暴雨压住了整座山庄的声音，会客厅与书房相连，老旧配电箱时不时发出轻响。",
         motive="如果赵铭在今晚开口，你多年来经营的一切都会崩塌。",
         initial_goal="在不暴露身份的前提下，让赵铭死于一场看似意外或无法指向你的事件。",
+        hidden_objective="在案发后及时销毁挪用账目。",
+        opening_hook="遗产说明会开始前，所有人的注意力都被暴雨和账本牵住。",
+        primary_tool_name="毒酒",
+        secondary_tool_name="配电箱",
     )
 
 
@@ -557,9 +573,13 @@ def _pending_choice_to_dict(choice: PendingChoice) -> dict[str, Any]:
 
 
 def build_default_premise() -> StoryPremise:
-    """Return the default premise from the first selectable story file."""
+    """Return the default premise from the primary selectable story file."""
 
-    story = load_story_catalog()[0]
+    stories = load_story_catalog()
+    story = next(
+        (candidate for candidate in stories if candidate.id == "tingtaoge_last_night"),
+        stories[0],
+    )
     return build_story_premise(story, story.roles[0].id)
 
 
@@ -1002,6 +1022,7 @@ def _premise_to_dict(premise: StoryPremise) -> dict[str, str]:
         "story_subtitle": premise.story_subtitle,
         "simulation_operator_name": premise.simulation_operator_name,
         "simulation_background": premise.simulation_background,
+        "simulation_briefing": premise.simulation_briefing,
         "player_role_id": premise.player_role_id,
         "player_role_name": premise.player_role_name,
         "player_display_name": premise.player_display_name,
