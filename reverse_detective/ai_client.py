@@ -123,8 +123,7 @@ class ReverseDetectiveAIClient:
 
         response = client.responses.create(
             model=self._config.model,
-            instructions=self._build_system_prompt(),
-            input=self._build_user_prompt(request),
+            input=self._build_response_input(request),
             reasoning={"effort": self._config.reasoning_effort},
             text={"format": {"type": "json_object"}},
             store=not self._config.disable_response_storage,
@@ -166,6 +165,20 @@ class ReverseDetectiveAIClient:
             else scene_to_dict(request.current_scene),
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    def _build_response_input(self, request: AIRequestPayload) -> list[dict[str, Any]]:
+        return [
+            {
+                "type": "message",
+                "role": "system",
+                "content": self._build_system_prompt(),
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": self._build_user_prompt(request),
+            },
+        ]
 
     def _extract_response_content(self, response: Any) -> str:
         output_text = getattr(response, "output_text", None)

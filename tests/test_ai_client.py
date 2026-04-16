@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from reverse_detective.ai_client import ReverseDetectiveAIClient, build_default_premise
+from reverse_detective.ai_client import AIRequestPayload, ReverseDetectiveAIClient, build_default_premise
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 
@@ -88,3 +88,35 @@ def test_extract_response_content_reads_output_text(tmp_path: Path) -> None:
         output_text = '{"scene": {}}'
 
     assert client._extract_response_content(FakeResponse()) == '{"scene": {}}'
+
+
+def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=True,
+            fallback_to_mock_on_error=True,
+            credentials_path=tmp_path / "credentials.json",
+        )
+    )
+    premise = build_default_premise()
+
+    response_input = client._build_response_input(
+        AIRequestPayload(
+            premise=premise,
+            current_scene=None,
+            history=(),
+            latest_choice=None,
+        )
+    )
+
+    assert isinstance(response_input, list)
+    assert response_input[0]["role"] == "system"
+    assert response_input[1]["role"] == "user"
+    assert isinstance(response_input[0]["content"], str)
+    assert isinstance(response_input[1]["content"], str)
