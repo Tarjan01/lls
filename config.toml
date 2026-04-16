@@ -1,0 +1,15 @@
+[display]
+title = "Reverse Detective Demo"
+width = 1280
+height = 720
+fps = 60
+
+[ai]
+provider = "crs"
+base_url = ""
+model = "gpt-4.1-mini"
+timeout_seconds = 30
+use_mock_when_unconfigured = true
+fallback_to_mock_on_error = true
+credentials_path = "~/.reverse_detective/credentials.json"
+

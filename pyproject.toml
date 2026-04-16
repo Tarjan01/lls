@@ -1,0 +1,19 @@
+[project]
+name = "reverse-detective"
+version = "0.1.0"
+description = "Playable demo for the Reverse Detective concept."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+game = "reverse_detective.app:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
