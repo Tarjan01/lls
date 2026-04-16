@@ -190,10 +190,38 @@ def _require_optional_string(value: Any, path: str) -> str | None:
 
 
 def _require_point(value: Any, path: str) -> Point:
+    if isinstance(value, Mapping):
+        return _require_mapping_point(value, path)
+
     point_values = _require_sequence(value, path)
-    if len(point_values) != 2 or not all(isinstance(item, int) for item in point_values):
+    if len(point_values) != 2:
         raise SceneValidationError(f"{path} must contain exactly two integers.")
-    return int(point_values[0]), int(point_values[1])
+    return (
+        _require_integer_coordinate(point_values[0], f"{path}[0]"),
+        _require_integer_coordinate(point_values[1], f"{path}[1]"),
+    )
+
+
+def _require_mapping_point(value: Mapping[str, Any], path: str) -> Point:
+    point_data = dict(value)
+    missing = [key for key in ("x", "y") if key not in point_data]
+    if missing:
+        raise SceneValidationError(f"{path} must contain x and y coordinates.")
+
+    return (
+        _require_integer_coordinate(point_data["x"], f"{path}.x"),
+        _require_integer_coordinate(point_data["y"], f"{path}.y"),
+    )
+
+
+def _require_integer_coordinate(value: Any, path: str) -> int:
+    if isinstance(value, bool):
+        raise SceneValidationError(f"{path} must be an integer.")
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raise SceneValidationError(f"{path} must be an integer.")
 
 
 def _require_game_status(value: Any, path: str) -> str:

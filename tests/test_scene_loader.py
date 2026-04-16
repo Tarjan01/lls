@@ -87,3 +87,81 @@ def test_load_scene_payload_rejects_extra_keys() -> None:
 
     with pytest.raises(SceneValidationError):
         load_scene_payload(payload)
+
+
+def test_load_scene_payload_accepts_object_coordinates() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "简述",
+        },
+        "npcs": [
+            {
+                "id": "watcher",
+                "name": "守夜人",
+                "image": "npc.png",
+                "position": {"x": 320, "y": 180},
+                "patrol": [
+                    {"x": 320, "y": 180},
+                    {"x": 420, "y": 180},
+                ],
+            }
+        ],
+        "interactables": [
+            {
+                "id": "cabinet",
+                "name": "柜子",
+                "image": "item.png",
+                "position": {"x": 240, "y": 360},
+                "options": [{"label": "查看", "action_id": "inspect"}],
+            }
+        ],
+        "narrative": "当前局势",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    scene = load_scene_payload(payload)
+
+    assert scene.npcs[0].position == (320, 180)
+    assert scene.npcs[0].patrol == ((320, 180), (420, 180))
+    assert scene.interactables[0].position == (240, 360)
+    assert scene_to_dict(scene)["npcs"][0]["patrol"] == [[320, 180], [420, 180]]
+
+
+def test_load_scene_payload_rejects_non_integral_coordinate_values() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "简述",
+        },
+        "npcs": [
+            {
+                "id": "watcher",
+                "name": "守夜人",
+                "image": "npc.png",
+                "position": [320, 180],
+                "patrol": [
+                    {"x": 320, "y": 180.5},
+                    {"x": 420, "y": 180},
+                ],
+            }
+        ],
+        "interactables": [
+            {
+                "id": "cabinet",
+                "name": "柜子",
+                "image": "item.png",
+                "position": [240, 360],
+                "options": [{"label": "查看", "action_id": "inspect"}],
+            }
+        ],
+        "narrative": "当前局势",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    with pytest.raises(SceneValidationError, match="must be an integer"):
+        load_scene_payload(payload)

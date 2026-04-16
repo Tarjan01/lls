@@ -26,7 +26,7 @@ PROMPT_SCHEMA = {
             "name": "string",
             "image": "string",
             "position": [0, 0],
-            "patrol": None,
+            "patrol": [[0, 0], [10, 10]],
         }
     ],
     "interactables": [
@@ -217,6 +217,24 @@ class ReverseDetectiveAIClient:
                 return "".join(parts)
 
         raise AIClientError("Live AI response did not contain textual JSON output.")
+
+    def _build_system_prompt(self) -> str:
+        schema_text = json.dumps(PROMPT_SCHEMA, ensure_ascii=False, indent=2)
+        return (
+            "You generate scene JSON for a reverse-detective game. "
+            "Return exactly one JSON object and nothing else. "
+            "Do not return markdown, explanations, or code fences. "
+            "After each player choice, generate the next scene from the initial premise, full action history, and latest choice. "
+            "The JSON must match this schema exactly with no missing or extra fields:\n"
+            f"{schema_text}\n"
+            "Requirements:\n"
+            "1. game_status must be one of ongoing, player_win, player_lose, special_ending.\n"
+            "2. ending_text must be null when game_status is ongoing, otherwise it must contain a concrete ending text.\n"
+            "3. Every position must be a JSON array [x, y] of integers.\n"
+            "4. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
+            "5. narrative must describe the current situation and risk.\n"
+            "6. All visible text content must be Simplified Chinese.\n"
+        )
 
     def _load_api_key(self, credentials_path: Path) -> str | None:
         if not credentials_path.exists():
