@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from reverse_detective.ai_client import AIRequestPayload, ReverseDetectiveAIClient, build_default_premise
+from reverse_detective.ai_client import (
+    AIRequestPayload,
+    ReverseDetectiveAIClient,
+    build_default_premise,
+)
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 
@@ -29,7 +33,6 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
     assert client.mode_label == "Mock Story"
     assert scene.game_status == "ongoing"
     assert len(scene.interactables) >= 3
-    assert scene.npcs[0].name == "赵万山"
 
 
 def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
@@ -52,10 +55,10 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
     history = []
 
     for turn_index, interactable_id, interactable_name, label, action_id in [
-        (1, "case_clue", "祖宅变卖文件", "确认地契与变卖安排", "inspect_clue"),
-        (2, "primary_tool", "安神茶", "把安神茶送进备用茶盏", "prepare_tool"),
-        (3, "support_tool", "总控平板", "用总控平板接管书房设备", "prepare_support"),
-        (4, "target_window", "锁死书房后的无声死角", "锁门后引爆安神茶与设备异常", "execute_clean"),
+        (1, "case_clue", "case clue", "inspect clue", "inspect_clue"),
+        (2, "primary_tool", "primary tool", "prepare tool", "prepare_tool"),
+        (3, "support_tool", "support tool", "prepare support", "prepare_support"),
+        (4, "target_window", "target window", "execute clean", "execute_clean"),
     ]:
         choice = PendingChoice(
             turn_index=turn_index,
@@ -143,6 +146,8 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert response_input[1]["role"] == "user"
     assert isinstance(response_input[0]["content"], str)
     assert isinstance(response_input[1]["content"], str)
+    assert '"scene_layout"' in response_input[1]["content"]
+    assert '"coordinate_system": "pixel"' in response_input[1]["content"]
 
 
 def test_live_scene_uses_streaming_responses_api(
@@ -154,10 +159,10 @@ def test_live_scene_uses_streaming_responses_api(
 
     captured: dict[str, object] = {}
     scene_json = (
-        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"测试场景"},'
-        '"npcs":[],"interactables":[{"id":"obj","name":"测试物品","image":"obj.png",'
-        '"position":[100,100],"options":[{"label":"观察","action_id":"inspect"}]}],'
-        '"narrative":"测试叙述","game_status":"ongoing","ending_text":null}'
+        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"scene"},'
+        '"npcs":[],"interactables":[{"id":"obj","name":"item","image":"obj.png",'
+        '"position":[640,260],"options":[{"label":"inspect","action_id":"inspect"}]}],'
+        '"narrative":"story","game_status":"ongoing","ending_text":null}'
     )
 
     class FakeEvent:
@@ -216,3 +221,135 @@ def test_live_scene_uses_streaming_responses_api(
     assert captured["store"] is False
     assert captured["reasoning"] == {"effort": "xhigh"}
     assert isinstance(captured["input"], list)
+
+
+def test_live_scene_returns_early_when_streamed_json_is_complete(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+
+    scene_json = (
+        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"scene"},'
+        '"npcs":[],"interactables":[{"id":"obj","name":"item","image":"obj.png",'
+        '"position":[640,260],"options":[{"label":"inspect","action_id":"inspect"}]}],'
+        '"narrative":"story","game_status":"ongoing","ending_text":null}'
+    )
+    call_state = {"final_called": False}
+
+    class FakeEvent:
+        type = "response.output_text.delta"
+
+        def __init__(self, delta: str):
+            self.delta = delta
+
+    class FakeStream:
+        def __enter__(self) -> "FakeStream":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def __iter__(self):
+            yield FakeEvent(scene_json)
+            yield FakeEvent("THIS SHOULD NEVER BE READ")
+
+        def get_final_response(self):
+            call_state["final_called"] = True
+            raise AssertionError("get_final_response should not be called after early parse")
+
+    class FakeResponses:
+        def stream(self, **kwargs):
+            return FakeStream()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        )
+    )
+
+    scene = client.generate_initial_scene(build_default_premise())
+
+    assert scene.interactables[0].position == (640, 260)
+    assert call_state["final_called"] is False
+
+
+def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+
+    scene_json = (
+        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"scene"},'
+        '"npcs":[{"id":"detective","name":"Detective","image":"npc.png","position":[38,74],'
+        '"patrol":[[38,74],[52,70],[60,78]]}],"interactables":'
+        '[{"id":"glass","name":"Display","image":"glass.png","position":[82,64],'
+        '"options":[{"label":"inspect","action_id":"inspect"}]}],'
+        '"narrative":"story","game_status":"ongoing","ending_text":null}'
+    )
+
+    class FakeEvent:
+        type = "response.output_text.delta"
+
+        def __init__(self, delta: str):
+            self.delta = delta
+
+    class FakeStream:
+        def __enter__(self) -> "FakeStream":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def __iter__(self):
+            yield FakeEvent(scene_json)
+
+        def get_final_response(self):
+            raise AssertionError("get_final_response should not be called after early parse")
+
+    class FakeResponses:
+        def stream(self, **kwargs):
+            return FakeStream()
+
+    class FakeOpenAI:
+        def __init__(self, **kwargs):
+            self.responses = FakeResponses()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="https://apikey.soxio.me/openai",
+            model="gpt-5.4",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        )
+    )
+
+    scene = client.generate_initial_scene(build_default_premise())
+
+    assert scene.npcs[0].position == (509, 371)
+    assert scene.npcs[0].patrol == ((509, 371), (662, 358), (749, 383))
+    assert scene.interactables[0].position == (988, 340)
