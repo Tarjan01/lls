@@ -63,6 +63,7 @@ class ReverseDetectiveAIClient:
         self._mock_engine = _MockStoryEngine()
         self._api_key = self._load_api_key(config.credentials_path)
         self._live_enabled = bool(config.base_url and config.model and self._api_key)
+        self._last_mode_label = "Live API" if self._live_enabled else "Mock Story"
 
         if not self._live_enabled and not config.use_mock_when_unconfigured:
             raise AIClientError(
@@ -71,7 +72,7 @@ class ReverseDetectiveAIClient:
 
     @property
     def mode_label(self) -> str:
-        return "Live API" if self._live_enabled else "Mock Story"
+        return self._last_mode_label
 
     def generate_initial_scene(self, premise: StoryPremise) -> SceneState:
         request = AIRequestPayload(
@@ -100,11 +101,14 @@ class ReverseDetectiveAIClient:
     def _generate_scene(self, request: AIRequestPayload) -> SceneState:
         if self._live_enabled:
             try:
-                return self._generate_live_scene(request)
+                scene = self._generate_live_scene(request)
+                self._last_mode_label = "Live API"
+                return scene
             except Exception as exc:
                 if not self._config.fallback_to_mock_on_error:
                     raise AIClientError(f"Live AI request failed: {exc}") from exc
 
+        self._last_mode_label = "Mock Story"
         return self._mock_engine.generate_scene(request)
 
     def _generate_live_scene(self, request: AIRequestPayload) -> SceneState:
@@ -189,8 +193,11 @@ class ReverseDetectiveAIClient:
         if not credentials_path.exists():
             return None
 
-        with credentials_path.open("r", encoding="utf-8") as file:
-            credentials = json.load(file)
+        try:
+            with credentials_path.open("r", encoding="utf-8") as file:
+                credentials = json.load(file)
+        except (OSError, json.JSONDecodeError):
+            return None
 
         if not isinstance(credentials, dict):
             return None

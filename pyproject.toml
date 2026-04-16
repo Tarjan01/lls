@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Playable demo for the Reverse Detective concept."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "openai>=2.32.0",
+    "pygame-ce>=2.5.7",
+]
 
 [project.scripts]
 game = "reverse_detective.app:main"
@@ -16,4 +19,9 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
 
