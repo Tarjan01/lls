@@ -24,7 +24,8 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
 
     assert client.mode_label == "Mock Story"
     assert scene.game_status == "ongoing"
-    assert len(scene.interactables) >= 4
+    assert len(scene.interactables) >= 3
+    assert scene.npcs[0].name == "赵万山"
 
 
 def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
@@ -45,10 +46,10 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
     history = []
 
     for turn_index, interactable_id, interactable_name, label, action_id in [
-        (1, "gloves", "皮手套", "戴上手套", "wear_gloves"),
-        (2, "knife", "装饰折刀", "把折刀藏进口袋", "take_knife"),
-        (3, "fuse_box", "老旧配电箱", "切断电源", "cut_power"),
-        (4, "victim_window", "赵铭背后的暗影", "趁黑从背后动手", "darkness_strike"),
+        (1, "case_clue", "祖宅变卖文件", "确认地契与变卖安排", "inspect_clue"),
+        (2, "primary_tool", "安神茶", "把安神茶送进备用茶盏", "prepare_tool"),
+        (3, "support_tool", "总控平板", "用总控平板接管书房设备", "prepare_support"),
+        (4, "target_window", "锁死书房后的无声死角", "锁门后引爆安神茶与设备异常", "execute_clean"),
     ]:
         choice = PendingChoice(
             turn_index=turn_index,

@@ -11,6 +11,7 @@ from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 from reverse_detective.models import ActionRecord, SceneState, StoryPremise
 from reverse_detective.scene_loader import load_scene_payload, scene_to_dict
+from reverse_detective.story_loader import build_story_premise, load_story_catalog
 
 
 PROMPT_SCHEMA = {
@@ -552,4 +553,469 @@ def _pending_choice_to_dict(choice: PendingChoice) -> dict[str, Any]:
         "interactable_name": choice.interactable_name,
         "label": choice.label,
         "action_id": choice.action_id,
+    }
+
+
+def build_default_premise() -> StoryPremise:
+    """Return the default premise from the first selectable story file."""
+
+    story = load_story_catalog()[0]
+    return build_story_premise(story, story.roles[0].id)
+
+
+class _MockStoryEngine:
+    """Deterministic local story engine used when no live AI is available."""
+
+    def generate_scene(self, request: AIRequestPayload) -> SceneState:
+        history = list(request.history)
+        if request.latest_choice is not None:
+            history.append(request.latest_choice.to_record())
+
+        flags = self._derive_flags(history)
+        strategy = self._build_strategy_copy(request.premise)
+
+        if request.latest_choice is None:
+            payload = self._build_ongoing_scene(
+                request.premise,
+                flags,
+                (
+                    f"{request.premise.opening_hook}"
+                    f" 你现在以{request.premise.player_role_name}的身份进入重演，只能沿着最危险的那条缝隙前进。"
+                ),
+                strategy,
+            )
+        else:
+            payload = self._build_from_latest_choice(
+                request.premise,
+                flags,
+                request.latest_choice,
+                strategy,
+            )
+
+        return load_scene_payload(payload)
+
+    def _build_from_latest_choice(
+        self,
+        premise: StoryPremise,
+        flags: dict[str, bool],
+        latest_choice: PendingChoice,
+        strategy: dict[str, Any],
+    ) -> dict[str, Any]:
+        action_id = latest_choice.action_id
+
+        if action_id == "execute_clean":
+            return self._build_terminal_scene(
+                premise=premise,
+                game_status="player_win",
+                background_image="scene_tingtaoge_blackout.png"
+                if flags["support_ready"]
+                else "scene_tingtaoge_study.png",
+                description=strategy["clean_description"],
+                narrative=strategy["clean_narrative"],
+                ending_text=strategy["clean_ending"],
+            )
+
+        if action_id == "execute_risky":
+            return self._build_terminal_scene(
+                premise=premise,
+                game_status=strategy["risky_status"],
+                background_image="scene_tingtaoge_study.png",
+                description=strategy["risky_description"],
+                narrative=strategy["risky_narrative"],
+                ending_text=strategy["risky_ending"],
+            )
+
+        if action_id == "rush_target":
+            return self._build_terminal_scene(
+                premise=premise,
+                game_status="player_lose",
+                background_image="scene_tingtaoge_study.png",
+                description=strategy["rush_description"],
+                narrative=strategy["rush_narrative"],
+                ending_text=strategy["rush_ending"],
+            )
+
+        if action_id == "inspect_clue":
+            return self._build_ongoing_scene(premise, flags, strategy["clue_narrative"], strategy)
+
+        if action_id == "prepare_tool":
+            return self._build_ongoing_scene(premise, flags, strategy["tool_narrative"], strategy)
+
+        if action_id == "prepare_support":
+            return self._build_ongoing_scene(
+                premise,
+                flags,
+                strategy["support_narrative"],
+                strategy,
+            )
+
+        return self._build_ongoing_scene(premise, flags, strategy["wait_narrative"], strategy)
+
+    def _build_ongoing_scene(
+        self,
+        premise: StoryPremise,
+        flags: dict[str, bool],
+        narrative: str,
+        strategy: dict[str, Any],
+    ) -> dict[str, Any]:
+        support_ready = flags["support_ready"]
+        pursuer_position = [332, 242] if support_ready else [260, 250]
+        pursuer_patrol = None if support_ready else [[260, 250], [420, 250], [260, 250]]
+        victim_position = [924, 252] if not support_ready else [952, 282]
+
+        interactables: list[dict[str, Any]] = []
+        if not flags["clue_checked"]:
+            interactables.append(
+                self._interactable(
+                    "case_clue",
+                    strategy["clue_name"],
+                    [220, 452],
+                    [
+                        (strategy["clue_action_label"], "inspect_clue"),
+                        ("先记下位置", "wait"),
+                    ],
+                )
+            )
+        if not flags["tool_ready"]:
+            interactables.append(
+                self._interactable(
+                    "primary_tool",
+                    premise.primary_tool_name,
+                    [432, 432],
+                    [
+                        (strategy["tool_action_label"], "prepare_tool"),
+                        ("暂时不碰它", "wait"),
+                    ],
+                )
+            )
+        if not flags["support_ready"]:
+            interactables.append(
+                self._interactable(
+                    "support_tool",
+                    premise.secondary_tool_name,
+                    [1060, 212],
+                    [
+                        (strategy["support_action_label"], "prepare_support"),
+                        ("继续观察动线", "wait"),
+                    ],
+                )
+            )
+
+        interactables.append(self._build_target_interactable(premise, flags, strategy))
+
+        if flags["tool_ready"] and flags["support_ready"]:
+            scene_description = "听涛阁的灯光与监控都被你切成了可用的死角，书房像一座精心准备的陷阱。"
+        elif flags["support_ready"]:
+            scene_description = "书房门外的走廊忽明忽暗，系统延迟开始吞掉别墅原本稳定的秩序。"
+        else:
+            scene_description = "书房外的空气凝滞而昂贵，听涛阁所有光滑表面都像在替赵万山守口如瓶。"
+
+        return {
+            "scene": {
+                "background_image": "scene_tingtaoge_blackout.png"
+                if flags["support_ready"]
+                else "scene_tingtaoge_study.png",
+                "bgm": "storm_tension.mp3",
+                "description": scene_description,
+            },
+            "npcs": [
+                {
+                    "id": "victim",
+                    "name": premise.victim_name,
+                    "image": "npc_victim.png",
+                    "position": victim_position,
+                    "patrol": None,
+                },
+                {
+                    "id": "pursuer",
+                    "name": premise.detective_name,
+                    "image": "npc_pursuer.png",
+                    "position": pursuer_position,
+                    "patrol": pursuer_patrol,
+                },
+                {
+                    "id": "young_master",
+                    "name": "赵少爷",
+                    "image": "npc_young_master.png",
+                    "position": [702, 238],
+                    "patrol": None,
+                },
+            ],
+            "interactables": interactables,
+            "narrative": narrative,
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+
+    def _build_target_interactable(
+        self,
+        premise: StoryPremise,
+        flags: dict[str, bool],
+        strategy: dict[str, Any],
+    ) -> dict[str, Any]:
+        if flags["tool_ready"] and flags["support_ready"]:
+            name = strategy["target_name_ready"]
+            options = [
+                (strategy["clean_action_label"], "execute_clean"),
+                ("继续等待更稳的时机", "wait"),
+            ]
+        elif flags["tool_ready"]:
+            name = strategy["target_name_risky"]
+            options = [
+                (strategy["risky_action_label"], "execute_risky"),
+                ("先别暴露企图", "wait"),
+            ]
+        else:
+            name = strategy["target_name_exposed"]
+            options = [
+                (f"贸然靠近{premise.victim_name}", "rush_target"),
+                ("退回阴影里", "wait"),
+            ]
+
+        return self._interactable("target_window", name, [916, 352], options)
+
+    def _build_terminal_scene(
+        self,
+        *,
+        premise: StoryPremise,
+        game_status: str,
+        background_image: str,
+        description: str,
+        narrative: str,
+        ending_text: str,
+    ) -> dict[str, Any]:
+        return {
+            "scene": {
+                "background_image": background_image,
+                "bgm": "ending_resolve.mp3",
+                "description": description,
+            },
+            "npcs": [
+                {
+                    "id": "victim",
+                    "name": premise.victim_name,
+                    "image": "npc_victim.png",
+                    "position": [930, 260],
+                    "patrol": None,
+                },
+                {
+                    "id": "pursuer",
+                    "name": premise.detective_name,
+                    "image": "npc_pursuer.png",
+                    "position": [420, 250],
+                    "patrol": None,
+                },
+            ],
+            "interactables": [],
+            "narrative": narrative,
+            "game_status": game_status,
+            "ending_text": ending_text,
+        }
+
+    def _derive_flags(self, history: list[ActionRecord]) -> dict[str, bool]:
+        action_ids = {record.action_id for record in history}
+        return {
+            "clue_checked": "inspect_clue" in action_ids,
+            "tool_ready": "prepare_tool" in action_ids,
+            "support_ready": "prepare_support" in action_ids,
+        }
+
+    def _interactable(
+        self,
+        interactable_id: str,
+        name: str,
+        position: list[int],
+        options: list[tuple[str, str]],
+    ) -> dict[str, Any]:
+        return {
+            "id": interactable_id,
+            "name": name,
+            "image": f"{interactable_id}.png",
+            "position": position,
+            "options": [{"label": label, "action_id": action_id} for label, action_id in options],
+        }
+
+    def _build_strategy_copy(self, premise: StoryPremise) -> dict[str, Any]:
+        if premise.player_strategy_kind == "facility":
+            return {
+                "clue_name": "祖宅变卖文件",
+                "clue_action_label": "确认地契与变卖安排",
+                "clue_narrative": (
+                    f"泛黄的地契与电子合同并排躺在抽屉里。只要{premise.victim_name}今晚签完字，"
+                    "赵家老宅明天就会被推上拍卖桌。"
+                ),
+                "tool_action_label": f"把{premise.primary_tool_name}送进备用茶盏",
+                "tool_narrative": (
+                    f"你借添茶的动作把{premise.primary_tool_name}混进杯中。药性安静得像屋外的雾，"
+                    f"只等{premise.victim_name}下一次抿唇。"
+                ),
+                "support_action_label": f"用{premise.secondary_tool_name}接管书房设备",
+                "support_narrative": "你在总控界面里锁定门磁和空调程序，把书房调成一间只剩你知道出口的盒子。",
+                "wait_narrative": (
+                    f"{premise.player_display_name}几十年的忍耐还没到可以浪费的程度。"
+                    f"{premise.victim_name}仍在书房里自顾自地讲话，而你继续像影子一样站着。"
+                ),
+                "target_name_exposed": f"{premise.victim_name}桌边的明亮破绽",
+                "target_name_risky": f"{premise.victim_name}手边的茶盏",
+                "target_name_ready": "锁死书房后的无声死角",
+                "risky_action_label": f"诱导{premise.victim_name}喝下有问题的茶",
+                "clean_action_label": f"锁门后引爆{premise.primary_tool_name}与设备异常",
+                "clean_description": "书房的温度与灯光被悄悄调到最不稳定的边缘，昂贵的设备在封闭空间里替你抹平了最后一丝人为痕迹。",
+                "clean_narrative": (
+                    f"门锁闭合的轻响盖住了药效发作前最后一次呼吸。{premise.victim_name}倒下时，"
+                    "整间书房只剩系统报警像一场迟到的暴风雨。"
+                ),
+                "clean_ending": (
+                    f"{premise.detective_name}只能面对一间被智能设备和突发病理共同污染过的书房。"
+                    "你保住了老宅，也把自己从第一嫌疑人名单上轻轻挪开。"
+                ),
+                "risky_status": "special_ending",
+                "risky_description": "茶杯滚落在地毯边缘，药效与既往病史迅速纠缠在一起，像一场谁也不愿说透的家族旧疾。",
+                "risky_narrative": (
+                    f"你没有来得及控制整个房间，只能赌{premise.victim_name}会按旧习惯把茶喝完。"
+                    "事情确实发生了，但痕迹没有被完全擦掉。"
+                ),
+                "risky_ending": "死亡被暂时写成突发性病理反应。你赢得了一条模糊的退路，却还没赢到足够干净的结局。",
+                "rush_description": "没有药、没有遮掩、没有后手。你在最明亮的那一秒把自己的敌意直接暴露给了整栋别墅。",
+                "rush_narrative": f"你贸然靠近{premise.victim_name}，却被{premise.detective_name}和门口的摄像头动线同时捕捉。",
+                "rush_ending": f"{premise.player_role_name}的忠诚和愤怒都是真的，但真实动机并不能替你洗掉仓促留下的痕迹。你失败了。",
+            }
+
+        if premise.player_strategy_kind == "digital":
+            return {
+                "clue_name": "路由器访问日志",
+                "clue_action_label": "核对内网拓扑与书房节点",
+                "clue_narrative": (
+                    "书房的 VR 头显、窗帘电机和生命监测系统都挂在同一条内网链路上。"
+                    f"只要切对节点，{premise.victim_name}就会被自己最依赖的设备困住。"
+                ),
+                "tool_action_label": f"将{premise.primary_tool_name}注入书房网络",
+                "tool_narrative": (
+                    f"病毒像一滴黑色墨水渗进听涛阁的 Wi-Fi。{premise.victim_name}头上的 VR 设备"
+                    "开始吞噬错误数据，仿佛另一层不存在的房间正从屏幕背后长出来。"
+                ),
+                "support_action_label": f"布置{premise.secondary_tool_name}",
+                "support_narrative": (
+                    "你把通讯盲区压在书房周围，所有报警与日志上传都慢了半拍。"
+                    "这半拍足够让事故看起来像系统自己崩掉。"
+                ),
+                "wait_narrative": f"{premise.player_display_name}从来不靠冲动赢棋。你盯着听涛阁的网络节点，等它们再多露出一点可下刀的骨架。",
+                "target_name_exposed": f"{premise.victim_name}头上的 VR 头显",
+                "target_name_risky": f"{premise.victim_name}面前失真的控制界面",
+                "target_name_ready": "被盲区包住的书房主节点",
+                "risky_action_label": f"直接触发{premise.primary_tool_name}过载",
+                "clean_action_label": "在通讯盲区里伪造致命系统故障",
+                "clean_description": "VR 画面、室内传感器与门禁回路同时失真，整间书房像被一只看不见的手拖进了延迟与噪点深处。",
+                "clean_narrative": (
+                    f"{premise.victim_name}被困在自己的设备洪流里，心率和视觉同步失控。"
+                    "等通讯恢复时，系统已经替你讲完了第一版死亡经过。"
+                ),
+                "clean_ending": (
+                    f"{premise.detective_name}只能在一堆互相打架的日志里寻找因果。"
+                    "你带着真正的商业机密离开，把杀意藏进了一场看似高端设备自毁的事故。"
+                ),
+                "risky_status": "player_lose",
+                "risky_description": "系统确实崩了，但访问日志、异常流量和未清除的节点回写把整条入侵路径钉在了你来过的地方。",
+                "risky_narrative": f"没有盲区掩护时，{premise.primary_tool_name}留下的数字足迹比血迹还清楚。",
+                "risky_ending": f"{premise.detective_name}顺着日志就能把故障追到你身上。你证明了自己能杀人，却没能证明自己能消失。你失败了。",
+                "rush_description": "你没有先拿到系统控制权，就像赤手闯进一间全是摄像头的密室。",
+                "rush_narrative": f"你还没来得及改写任何设备，{premise.victim_name}就已经从 VR 画面里摘下头显看向你。",
+                "rush_ending": "没有系统掩护的黑客只剩可疑行踪与蹩脚借口。你失败了。",
+            }
+
+        if premise.player_strategy_kind == "chemical":
+            return {
+                "clue_name": "少爷的病历与药单",
+                "clue_action_label": "确认药物配方问题",
+                "clue_narrative": (
+                    "病历里的剂量记录和药厂批次对不上。你知道自己不是在猜测，"
+                    f"而是在读一场被{premise.victim_name}默认延续的慢性伤害。"
+                ),
+                "tool_action_label": f"配制{premise.primary_tool_name}",
+                "tool_narrative": "药剂在玻璃管里几乎无色。你只需要一次足够安静的接触，就能让神经反应像被某种旧病突然唤醒。",
+                "support_action_label": f"准备{premise.secondary_tool_name}",
+                "support_narrative": "你把伪造药瓶放进最顺手的拿取位置。下一次服药动作会看起来和往常完全一样。",
+                "wait_narrative": f"{premise.player_role_name}知道真正危险的不是药，而是时间。你收住呼吸，继续等待一个不必解释自己站位的瞬间。",
+                "target_name_exposed": f"{premise.victim_name}书桌旁的空档",
+                "target_name_risky": f"{premise.victim_name}随手可取的药盒",
+                "target_name_ready": "被调包后的服药路径",
+                "risky_action_label": f"直接让{premise.primary_tool_name}接触目标",
+                "clean_action_label": f"借{premise.secondary_tool_name}完成无声调包",
+                "clean_description": "药瓶上的标签、剂量和习惯性动作都没有出错，出错的只有藏在瓶身内部的那一点点命运偏转。",
+                "clean_narrative": (
+                    f"{premise.victim_name}像往常一样完成了服药动作，整个过程温和得几乎没有戏剧性。"
+                    "真正的戏剧性发生在几分钟后，他的神经系统先一步背叛了他。"
+                ),
+                "clean_ending": (
+                    "你保住了能为赵少爷翻案的原始证据，也把目标送进了一场足够像突发疾病的结尾。"
+                    f"{premise.detective_name}只能怀疑，却抓不住那次调包发生在何时。"
+                ),
+                "risky_status": "special_ending",
+                "risky_description": "症状发作得很快，快到让人来不及组织一套完整的怀疑，却也快到不够完美。",
+                "risky_narrative": "没有替换药瓶的掩护时，你只能赌一次近距离接触不会被回想起来。事情成了，但过程太靠近你本人。",
+                "risky_ending": "死亡看起来仍像意外，可只要有人重新拼接时间线，你的身影就会离核心事件太近。这是一场带裂痕的特殊结局。",
+                "rush_description": "当你没有药理准备就硬闯过去，温柔与知性的伪装反而成了最不自然的证据。",
+                "rush_narrative": f"你直接靠近{premise.victim_name}时，所有人都看得见你没有理由停留那么久。",
+                "rush_ending": "没有剂量设计和掩护路径，这场重演只会把你推出去承担全部嫌疑。你失败了。",
+            }
+
+        return {
+            "clue_name": "赵万山的体检报告",
+            "clue_action_label": "校对植入设备参数",
+            "clue_narrative": (
+                "报告上写满了可以被称作照护、也可以被称作把柄的数字。"
+                f"你比谁都清楚{premise.victim_name}那套身体还剩多少冗余。"
+            ),
+            "tool_action_label": f"准备{premise.primary_tool_name}",
+            "tool_narrative": "你把试剂压进便携注射器，剂量刚好位于尸检难以回头确认的边缘。",
+            "support_action_label": f"校准{premise.secondary_tool_name}",
+            "support_narrative": "脉冲笔在掌心里轻轻震动了一次。只要时机对，植入设备的沉默会比任何语言都更有说服力。",
+            "wait_narrative": f"{premise.player_display_name}清楚真正高明的杀人不是速度，而是让所有指标都在死前仍然像一份正常报告。你继续等待。",
+            "target_name_exposed": f"{premise.victim_name}座椅旁的治疗空档",
+            "target_name_risky": f"{premise.victim_name}手边的问诊死角",
+            "target_name_ready": "被医疗权限覆盖的书房角落",
+            "risky_action_label": f"只使用{premise.primary_tool_name}模拟病发",
+            "clean_action_label": f"联动{premise.primary_tool_name}与{premise.secondary_tool_name}",
+            "clean_description": "医疗设备的监测曲线和人体反应被你同时推向同一个方向，像一段早就写好的病程终于在今晚落下句点。",
+            "clean_narrative": (
+                f"{premise.victim_name}的身体先一步熄火，而植入设备则替你补上了最后的伪证。"
+                "等门外的人冲进来，一切都已经像极了医学能够解释的那种失控。"
+            ),
+            "clean_ending": (
+                f"{premise.detective_name}只能得到一份太像自然病程的报告。"
+                "你顺手回收了所有会伤到自己的旧账，把整起事件裹进专业权威的外壳里。"
+            ),
+            "risky_status": "special_ending",
+            "risky_description": "症状被成功伪装成了急性病发，但没有设备协同的那部分空白，仍让现场多了一些刺眼的停顿。",
+            "risky_narrative": f"你仅靠{premise.primary_tool_name}就把人推过了边界，只是边界附近留下的医学噪点还没有完全安静。",
+            "risky_ending": "你完成了杀人，却没完成最漂亮的医学叙事。这是一场足够危险、也足够接近成功的特殊结局。",
+            "rush_description": "没有试剂、没有设备、没有权限掩护的医生，只会比普通人更像嫌疑人。",
+            "rush_narrative": f"你贸然贴近{premise.victim_name}时，治疗身份立刻变成了最该被追问的借口。",
+            "rush_ending": "当专业身份反过来成为指向你的证词，这场实验就已经结束了。你失败了。",
+        }
+
+
+def _premise_to_dict(premise: StoryPremise) -> dict[str, str]:
+    return {
+        "story_id": premise.story_id,
+        "story_title": premise.story_title,
+        "story_subtitle": premise.story_subtitle,
+        "simulation_operator_name": premise.simulation_operator_name,
+        "simulation_background": premise.simulation_background,
+        "player_role_id": premise.player_role_id,
+        "player_role_name": premise.player_role_name,
+        "player_display_name": premise.player_display_name,
+        "player_identity": premise.player_identity,
+        "player_strategy_kind": premise.player_strategy_kind,
+        "victim_identity": premise.victim_identity,
+        "victim_name": premise.victim_name,
+        "detective_identity": premise.detective_identity,
+        "detective_name": premise.detective_name,
+        "setting": premise.setting,
+        "motive": premise.motive,
+        "initial_goal": premise.initial_goal,
+        "hidden_objective": premise.hidden_objective,
+        "opening_hook": premise.opening_hook,
+        "primary_tool_name": premise.primary_tool_name,
+        "secondary_tool_name": premise.secondary_tool_name,
     }
