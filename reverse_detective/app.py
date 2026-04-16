@@ -42,7 +42,9 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("base_url", "请求 Base URL", "text"),
     ("api_key", "API Key", "secret"),
     ("model", "模型名称", "text"),
+    ("reasoning_effort", "推理强度", "text"),
     ("timeout_seconds", "超时秒数", "float"),
+    ("disable_response_storage", "禁用响应存储", "bool"),
     ("use_mock_when_unconfigured", "未配置时使用本地 Mock", "bool"),
     ("fallback_to_mock_on_error", "请求失败时回退 Mock", "bool"),
 )
@@ -80,7 +82,9 @@ class SettingsDraft:
     base_url: str
     api_key: str
     model: str
+    reasoning_effort: str
     timeout_seconds: float
+    disable_response_storage: bool
     use_mock_when_unconfigured: bool
     fallback_to_mock_on_error: bool
 
@@ -92,7 +96,9 @@ class SettingsDraft:
             base_url=config.ai.base_url,
             api_key=api_key,
             model=config.ai.model,
+            reasoning_effort=config.ai.reasoning_effort,
             timeout_seconds=config.ai.timeout_seconds,
+            disable_response_storage=config.ai.disable_response_storage,
             use_mock_when_unconfigured=config.ai.use_mock_when_unconfigured,
             fallback_to_mock_on_error=config.ai.fallback_to_mock_on_error,
         )
@@ -109,7 +115,9 @@ class SettingsDraft:
                 provider=current_config.ai.provider,
                 base_url=self.base_url.strip(),
                 model=self.model.strip(),
+                reasoning_effort=self.reasoning_effort.strip() or "high",
                 timeout_seconds=self.timeout_seconds,
+                disable_response_storage=self.disable_response_storage,
                 use_mock_when_unconfigured=self.use_mock_when_unconfigured,
                 fallback_to_mock_on_error=self.fallback_to_mock_on_error,
                 credentials_path=current_config.ai.credentials_path,
@@ -671,6 +679,11 @@ class GameApp:
                 value = raw_value.strip()
                 if not value:
                     raise ValueError("模型名称不能为空。")
+            elif field_name == "reasoning_effort":
+                value = raw_value.strip().lower()
+                valid_efforts = {"none", "minimal", "low", "medium", "high", "xhigh"}
+                if value not in valid_efforts:
+                    raise ValueError("推理强度必须是 none/minimal/low/medium/high/xhigh。")
             elif field_name == "timeout_seconds":
                 value = float(raw_value.strip())
                 if value <= 0:
@@ -701,6 +714,9 @@ class GameApp:
             return
         if not candidate.ai.model:
             self._status_text = "模型名称不能为空。"
+            return
+        if candidate.ai.reasoning_effort not in {"none", "minimal", "low", "medium", "high", "xhigh"}:
+            self._status_text = "推理强度必须是 none/minimal/low/medium/high/xhigh。"
             return
         if candidate.ai.timeout_seconds <= 0:
             self._status_text = "超时秒数必须大于 0。"
@@ -757,7 +773,9 @@ class GameApp:
                 provider=ai_config.provider,
                 base_url=ai_config.base_url,
                 model=ai_config.model,
+                reasoning_effort=ai_config.reasoning_effort,
                 timeout_seconds=ai_config.timeout_seconds,
+                disable_response_storage=ai_config.disable_response_storage,
                 use_mock_when_unconfigured=True,
                 fallback_to_mock_on_error=True,
                 credentials_path=ai_config.credentials_path,

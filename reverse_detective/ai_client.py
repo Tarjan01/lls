@@ -121,17 +121,17 @@ class ReverseDetectiveAIClient:
             timeout=self._config.timeout_seconds,
         )
 
-        completion = client.chat.completions.create(
+        response = client.responses.create(
             model=self._config.model,
-            response_format={"type": "json_object"},
+            instructions=self._build_system_prompt(),
+            input=self._build_user_prompt(request),
+            reasoning={"effort": self._config.reasoning_effort},
+            text={"format": {"type": "json_object"}},
+            store=not self._config.disable_response_storage,
             temperature=0.8,
-            messages=[
-                {"role": "system", "content": self._build_system_prompt()},
-                {"role": "user", "content": self._build_user_prompt(request)},
-            ],
         )
 
-        raw_content = self._extract_message_content(completion)
+        raw_content = self._extract_response_content(response)
         try:
             return load_scene_payload(raw_content)
         except Exception as exc:
@@ -167,28 +167,28 @@ class ReverseDetectiveAIClient:
         }
         return json.dumps(payload, ensure_ascii=False, indent=2)
 
-    def _extract_message_content(self, completion: Any) -> str:
-        choice = completion.choices[0]
-        message = getattr(choice, "message", None)
-        if message is None:
-            raise AIClientError("Live AI response did not contain a message.")
+    def _extract_response_content(self, response: Any) -> str:
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
 
-        content = getattr(message, "content", None)
-        if isinstance(content, str):
-            return content
-
-        if isinstance(content, list):
+        output_items = getattr(response, "output", None)
+        if isinstance(output_items, list):
             parts: list[str] = []
-            for item in content:
-                text = getattr(item, "text", None)
-                if isinstance(text, str):
-                    parts.append(text)
-                elif isinstance(item, dict) and isinstance(item.get("text"), str):
-                    parts.append(item["text"])
+            for item in output_items:
+                content = getattr(item, "content", None)
+                if not isinstance(content, list):
+                    continue
+                for content_item in content:
+                    text = getattr(content_item, "text", None)
+                    if isinstance(text, str) and text.strip():
+                        parts.append(text)
+                    elif isinstance(content_item, dict) and isinstance(content_item.get("text"), str):
+                        parts.append(content_item["text"])
             if parts:
                 return "".join(parts)
 
-        raise AIClientError("Live AI message content was empty or not textual.")
+        raise AIClientError("Live AI response did not contain textual JSON output.")
 
     def _load_api_key(self, credentials_path: Path) -> str | None:
         if not credentials_path.exists():

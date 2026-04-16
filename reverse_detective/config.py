@@ -26,7 +26,9 @@ class AIConfig:
     provider: str
     base_url: str
     model: str
+    reasoning_effort: str
     timeout_seconds: float
+    disable_response_storage: bool
     use_mock_when_unconfigured: bool
     fallback_to_mock_on_error: bool
     credentials_path: Path
@@ -56,7 +58,9 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             provider=str(ai_data.get("provider", "crs")),
             base_url=str(ai_data.get("base_url", "")).strip(),
             model=str(ai_data.get("model", "gpt-4.1-mini")),
+            reasoning_effort=str(ai_data.get("reasoning_effort", "high")).strip() or "high",
             timeout_seconds=float(ai_data.get("timeout_seconds", 30)),
+            disable_response_storage=bool(ai_data.get("disable_response_storage", True)),
             use_mock_when_unconfigured=bool(ai_data.get("use_mock_when_unconfigured", True)),
             fallback_to_mock_on_error=bool(ai_data.get("fallback_to_mock_on_error", True)),
             credentials_path=Path(
@@ -110,7 +114,9 @@ def save_config(config: AppConfig, config_path: Path | None = None) -> None:
             f"provider = {_toml_quote(config.ai.provider)}",
             f"base_url = {_toml_quote(config.ai.base_url)}",
             f"model = {_toml_quote(config.ai.model)}",
+            f"reasoning_effort = {_toml_quote(config.ai.reasoning_effort)}",
             f"timeout_seconds = {config.ai.timeout_seconds}",
+            f"disable_response_storage = {_toml_bool(config.ai.disable_response_storage)}",
             f"use_mock_when_unconfigured = {_toml_bool(config.ai.use_mock_when_unconfigured)}",
             f"fallback_to_mock_on_error = {_toml_bool(config.ai.fallback_to_mock_on_error)}",
             f"credentials_path = {_toml_quote(str(config.ai.credentials_path))}",

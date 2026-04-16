@@ -13,7 +13,9 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-4.1-mini",
+            reasoning_effort="high",
             timeout_seconds=30,
+            disable_response_storage=True,
             use_mock_when_unconfigured=True,
             fallback_to_mock_on_error=True,
             credentials_path=tmp_path / "missing_credentials.json",
@@ -34,7 +36,9 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
             provider="crs",
             base_url="",
             model="gpt-4.1-mini",
+            reasoning_effort="high",
             timeout_seconds=30,
+            disable_response_storage=True,
             use_mock_when_unconfigured=True,
             fallback_to_mock_on_error=True,
             credentials_path=tmp_path / "missing_credentials.json",
@@ -63,3 +67,24 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
 
     assert scene.game_status == "player_win"
     assert scene.ending_text is not None
+
+
+def test_extract_response_content_reads_output_text(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(
+        AIConfig(
+            provider="crs",
+            base_url="",
+            model="gpt-5.4",
+            reasoning_effort="xhigh",
+            timeout_seconds=30,
+            disable_response_storage=True,
+            use_mock_when_unconfigured=True,
+            fallback_to_mock_on_error=True,
+            credentials_path=tmp_path / "missing_credentials.json",
+        )
+    )
+
+    class FakeResponse:
+        output_text = '{"scene": {}}'
+
+    assert client._extract_response_content(FakeResponse()) == '{"scene": {}}'
