@@ -1,0 +1,206 @@
+{
+  "background": [
+    {
+      "id": "security_control_room",
+      "path": "backgrounds/security_control_room.png",
+      "aliases": ["rainy_villa_hall", "control_room", "security_room", "night_hall", "hallway"],
+      "tags": ["indoor", "mansion", "villa", "surveillance", "night", "investigation"]
+    },
+    {
+      "id": "gallery_surveillance_room",
+      "path": "backgrounds/gallery_surveillance_room.png",
+      "aliases": ["gallery_control_room", "gallery_security_room", "surveillance_room"],
+      "tags": ["gallery", "museum", "control", "monitoring", "night"]
+    },
+    {
+      "id": "mansion_study_room",
+      "path": "backgrounds/mansion_study_room.png",
+      "aliases": ["study_room", "villa_study", "library_room", "manor_study", "rainy_villa_ending"],
+      "tags": ["indoor", "study", "library", "office", "mansion", "room"]
+    },
+    {
+      "id": "gallery_inner_hall",
+      "path": "backgrounds/gallery_inner_hall.png",
+      "aliases": ["gallery_hall", "art_gallery", "exhibition_hall", "glass_gallery", "mirror_gallery"],
+      "tags": ["gallery", "museum", "interior", "hall", "exhibit", "glass"]
+    },
+    {
+      "id": "estate_garden",
+      "path": "backgrounds/estate_garden.png",
+      "aliases": ["estate_ground", "garden", "courtyard", "outdoor"],
+      "tags": ["garden", "yard", "outdoor", "estate", "villa", "grounds"]
+    },
+    {
+      "id": "villa_exterior",
+      "path": "backgrounds/villa_exterior.png",
+      "aliases": ["rainy_villa_exterior", "manor_exterior", "castle_exterior"],
+      "tags": ["exterior", "villa", "manor", "castle", "night", "remote"]
+    },
+    {
+      "id": "forest_edge",
+      "path": "backgrounds/forest_edge.png",
+      "aliases": ["forest", "woods", "mountain_forest"],
+      "tags": ["forest", "trees", "outdoor", "remote", "path"]
+    },
+    {
+      "id": "mountain_road",
+      "path": "backgrounds/mountain_road.png",
+      "aliases": ["cliff_path", "remote_road", "mountain_path"],
+      "tags": ["road", "mountain", "remote", "outdoor", "escape"]
+    }
+  ],
+  "npc": [
+    {
+      "id": "hitman_suit",
+      "path": "npcs/hitman_suit.png",
+      "aliases": ["detective", "detective_npc", "suspect_man", "killer", "professional"],
+      "tags": ["male", "suit", "formal", "investigator"]
+    },
+    {
+      "id": "man_blue",
+      "path": "npcs/man_blue.png",
+      "aliases": ["victim", "wealthy_man", "ceo", "curator", "owner", "victim_npc"],
+      "tags": ["male", "rich", "target", "businessman"]
+    },
+    {
+      "id": "man_brown",
+      "path": "npcs/man_brown.png",
+      "aliases": ["butler", "witness", "caretaker", "steward"],
+      "tags": ["male", "staff", "elder", "household"]
+    },
+    {
+      "id": "man_old",
+      "path": "npcs/man_old.png",
+      "aliases": ["doctor", "physician", "old_man", "private_doctor"],
+      "tags": ["male", "doctor", "medical", "elder"]
+    },
+    {
+      "id": "robot_assistant",
+      "path": "npcs/robot_assistant.png",
+      "aliases": ["technician", "hacker", "digital_operator", "robot"],
+      "tags": ["tech", "digital", "operator", "assistant"]
+    },
+    {
+      "id": "security_soldier",
+      "path": "npcs/security_soldier.png",
+      "aliases": ["security_guard", "guard", "soldier", "pursuer", "security"],
+      "tags": ["guard", "male", "security", "watcher"]
+    },
+    {
+      "id": "survivor",
+      "path": "npcs/survivor.png",
+      "aliases": ["assistant", "visitor", "helper", "witness_npc"],
+      "tags": ["male", "casual", "witness", "helper"]
+    },
+    {
+      "id": "woman_green",
+      "path": "npcs/woman_green.png",
+      "aliases": ["teacher", "rival", "female_suspect", "tutor", "auction_rival"],
+      "tags": ["female", "suspect", "teacher", "business"]
+    },
+    {
+      "id": "gaunt_figure",
+      "path": "npcs/gaunt_figure.png",
+      "aliases": ["victim_body", "corpse", "sick_man", "gaunt_victim"],
+      "tags": ["victim", "thin", "body", "ill"]
+    }
+  ],
+  "interactable": [
+    {
+      "id": "signal_jammer",
+      "path": "interactables/signal_jammer.png",
+      "aliases": ["jammer", "signal_blocker", "interference_device", "micro_jammer"],
+      "tags": ["device", "signal", "electronic", "digital"]
+    },
+    {
+      "id": "knife_tool",
+      "path": "interactables/knife_tool.png",
+      "aliases": ["knife", "blade", "kitchen_knife", "tool_blade"],
+      "tags": ["weapon", "blade", "sharp", "tool"]
+    },
+    {
+      "id": "case_file",
+      "path": "interactables/case_file.png",
+      "aliases": ["file", "dossier", "documents", "case_clue", "records"],
+      "tags": ["paper", "records", "evidence", "clue"]
+    },
+    {
+      "id": "locked_door",
+      "path": "interactables/locked_door.png",
+      "aliases": ["door_locked", "study_door", "security_door", "metal_door", "closed_door"],
+      "tags": ["door", "entry", "locked", "barrier"]
+    },
+    {
+      "id": "open_door",
+      "path": "interactables/open_door.png",
+      "aliases": ["door_open", "opened_door", "doorway"],
+      "tags": ["door", "entry", "open", "passage"]
+    },
+    {
+      "id": "window_panel",
+      "path": "interactables/window_panel.png",
+      "aliases": ["window", "target_window", "glass_panel", "display_window"],
+      "tags": ["window", "glass", "panel", "view"]
+    },
+    {
+      "id": "control_console",
+      "path": "interactables/control_console.png",
+      "aliases": ["console", "control_panel", "tablet", "monitor", "terminal", "total_control_tablet"],
+      "tags": ["console", "terminal", "electronic", "control", "system"]
+    },
+    {
+      "id": "round_table",
+      "path": "interactables/round_table.png",
+      "aliases": ["table", "round_desk", "meeting_table"],
+      "tags": ["table", "desk", "surface", "furniture"]
+    },
+    {
+      "id": "evidence_crate",
+      "path": "interactables/evidence_crate.png",
+      "aliases": ["crate", "evidence_box", "storage_box"],
+      "tags": ["crate", "box", "storage", "container"]
+    },
+    {
+      "id": "field_bag",
+      "path": "interactables/field_bag.png",
+      "aliases": ["bag", "satchel", "pack"],
+      "tags": ["bag", "container", "portable"]
+    },
+    {
+      "id": "small_bag",
+      "path": "interactables/small_bag.png",
+      "aliases": ["handbag", "pouch", "purse"],
+      "tags": ["bag", "small", "pouch", "portable"]
+    },
+    {
+      "id": "tool_bag",
+      "path": "interactables/tool_bag.png",
+      "aliases": ["toolkit", "tool_case", "tool_bag", "primary_tool"],
+      "tags": ["tool", "kit", "equipment", "case"]
+    },
+    {
+      "id": "medical_bag",
+      "path": "interactables/medical_bag.png",
+      "aliases": ["medical_kit", "support_tool", "doctor_bag", "medicine_bag", "support_kit"],
+      "tags": ["medical", "support", "kit", "bag"]
+    },
+    {
+      "id": "handgun_tool",
+      "path": "interactables/handgun_tool.png",
+      "aliases": ["gun", "handgun", "pistol"],
+      "tags": ["weapon", "gun", "tool", "firearm"]
+    },
+    {
+      "id": "signal_rig",
+      "path": "interactables/signal_rig.png",
+      "aliases": ["machine", "device_rig", "relay"],
+      "tags": ["machine", "device", "electronic", "rig"]
+    },
+    {
+      "id": "silencer_tool",
+      "path": "interactables/silencer_tool.png",
+      "aliases": ["silencer", "pen_tool", "pulse_pen"],
+      "tags": ["tool", "device", "compact", "weapon"]
+    }
+  ]
+}
