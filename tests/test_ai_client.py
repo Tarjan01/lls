@@ -116,7 +116,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     )
 
     assert isinstance(response_input, list)
-    assert response_input[0]["role"] == "system"
+    assert response_input[0]["role"] == "developer"
     assert response_input[1]["role"] == "user"
     assert isinstance(response_input[0]["content"], str)
     assert isinstance(response_input[1]["content"], str)

@@ -170,7 +170,7 @@ class ReverseDetectiveAIClient:
         return [
             {
                 "type": "message",
-                "role": "system",
+                "role": "developer",
                 "content": self._build_system_prompt(),
             },
             {
