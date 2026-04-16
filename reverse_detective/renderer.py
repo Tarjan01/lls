@@ -12,7 +12,7 @@ import pygame
 from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import ActionOption, Interactable, NPC, SceneState
 from reverse_detective.utils.assets import DEFAULT_ASSET_CACHE_ROOT, resolve_cached_asset_path
-from reverse_detective.utils.text import clamp_lines, wrap_text
+from reverse_detective.utils.text import fit_text, preview_wrapped_text, wrap_text
 
 
 Color = tuple[int, int, int]
@@ -24,6 +24,168 @@ class PlaceholderStyle:
     outline: Color
     text: Color
     shadow: Color
+
+
+@dataclass(frozen=True, slots=True)
+class TooltipTarget:
+    rect: pygame.Rect
+    text: str
+    selected: bool = False
+    preferred_width: int = 360
+
+
+class TooltipMixin:
+    """Shared tooltip behavior for menu and in-game renderers."""
+
+    _surface: pygame.Surface
+    _width: int
+    _height: int
+    _small_font: Any
+    _tooltip_targets: list[TooltipTarget]
+    _mouse_pos: tuple[int, int]
+
+    def _begin_tooltip_frame(self) -> None:
+        self._tooltip_targets = []
+        self._mouse_pos = pygame.mouse.get_pos()
+
+    def _register_tooltip(
+        self,
+        rect: pygame.Rect,
+        text: str,
+        *,
+        selected: bool = False,
+        preferred_width: int = 360,
+    ) -> None:
+        cleaned = text.strip()
+        if not cleaned:
+            return
+        self._tooltip_targets.append(
+            TooltipTarget(rect.copy(), cleaned, selected=selected, preferred_width=preferred_width)
+        )
+
+    def _draw_tooltip_overlay(self) -> None:
+        target = next(
+            (candidate for candidate in reversed(self._tooltip_targets) if candidate.rect.collidepoint(self._mouse_pos)),
+            None,
+        )
+        if target is None:
+            target = next(
+                (candidate for candidate in reversed(self._tooltip_targets) if candidate.selected),
+                None,
+            )
+        if target is None:
+            return
+
+        tooltip_width = min(max(target.preferred_width, 220), self._width - 32)
+        lines = wrap_text(target.text, self._small_font, tooltip_width - 24)
+        line_height = self._small_font.get_height() + 4
+        tooltip_height = 20 + len(lines) * line_height
+
+        anchor_x = self._mouse_pos[0] + 14 if target.rect.collidepoint(self._mouse_pos) else target.rect.left
+        anchor_y = self._mouse_pos[1] + 18 if target.rect.collidepoint(self._mouse_pos) else target.rect.bottom + 10
+        tooltip_rect = pygame.Rect(anchor_x, anchor_y, tooltip_width, tooltip_height)
+        if tooltip_rect.right > self._width - 12:
+            tooltip_rect.right = self._width - 12
+        if tooltip_rect.bottom > self._height - 12:
+            tooltip_rect.bottom = self._height - 12
+        if tooltip_rect.left < 12:
+            tooltip_rect.left = 12
+        if tooltip_rect.top < 12:
+            tooltip_rect.top = 12
+
+        overlay = pygame.Surface((tooltip_rect.width, tooltip_rect.height), pygame.SRCALPHA)
+        overlay.fill((12, 16, 22, 232))
+        self._surface.blit(overlay, tooltip_rect)
+        pygame.draw.rect(self._surface, (242, 209, 142), tooltip_rect, width=2, border_radius=12)
+        y = tooltip_rect.y + 10
+        for line in lines:
+            rendered = self._small_font.render(line, True, (244, 241, 233))
+            self._surface.blit(rendered, (tooltip_rect.x + 12, y))
+            y += line_height
+
+    def _blit_clamped_line(
+        self,
+        font: Any,
+        text: str,
+        position: tuple[int, int],
+        color: Color,
+        max_width: int,
+        *,
+        align: str = "left",
+        selected: bool = False,
+        tooltip_text: str | None = None,
+    ) -> pygame.Rect:
+        preview, truncated = fit_text(text, font, max_width)
+        rendered = font.render(preview or " ", True, color)
+        rect = rendered.get_rect()
+        if align == "center":
+            rect.midtop = position
+        elif align == "right":
+            rect.topright = position
+        else:
+            rect.topleft = position
+        self._surface.blit(rendered, rect)
+        if truncated:
+            self._register_tooltip(rect, tooltip_text or text, selected=selected, preferred_width=max(260, max_width))
+        return rect
+
+    def _blit_preview_block(
+        self,
+        font: Any,
+        text: str,
+        position: tuple[int, int],
+        color: Color,
+        max_width: int,
+        max_lines: int,
+        *,
+        line_gap: int = 4,
+        selected: bool = False,
+        tooltip_text: str | None = None,
+    ) -> pygame.Rect:
+        preview_lines, truncated = preview_wrapped_text(text, font, max_width, max_lines)
+        x, y = position
+        max_rendered_width = 0
+        for line in preview_lines:
+            rendered = font.render(line, True, color)
+            self._surface.blit(rendered, (x, y))
+            max_rendered_width = max(max_rendered_width, rendered.get_width())
+            y += rendered.get_height() + line_gap
+        rect = pygame.Rect(position[0], position[1], max_rendered_width, max(0, y - position[1] - line_gap))
+        if truncated:
+            self._register_tooltip(
+                rect,
+                tooltip_text or text,
+                selected=selected,
+                preferred_width=max(280, max_width + 24),
+            )
+        return rect
+
+    def _blit_clamped_lines(
+        self,
+        lines: list[str],
+        font: Any,
+        position: tuple[int, int],
+        color: Color,
+        max_width: int,
+        *,
+        line_gap: int = 4,
+        selected_indices: set[int] | None = None,
+    ) -> pygame.Rect:
+        x, y = position
+        selected_indices = selected_indices or set()
+        max_rendered_width = 0
+        for index, line in enumerate(lines):
+            rect = self._blit_clamped_line(
+                font,
+                line,
+                (x, y),
+                color,
+                max_width,
+                selected=index in selected_indices,
+            )
+            max_rendered_width = max(max_rendered_width, rect.width)
+            y += rect.height + line_gap
+        return pygame.Rect(position[0], position[1], max_rendered_width, max(0, y - position[1] - line_gap))
 
 
 class PlaceholderAssetResolver:
@@ -61,7 +223,7 @@ class PlaceholderAssetResolver:
         return PlaceholderStyle(fill, outline, text, shadow)
 
 
-class Renderer:
+class Renderer(TooltipMixin):
     """Pygame renderer for the current scene and UI overlays."""
 
     def __init__(
@@ -83,6 +245,8 @@ class Renderer:
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28)
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 16)
+        self._tooltip_targets: list[TooltipTarget] = []
+        self._mouse_pos = (0, 0)
 
     def draw(
         self,
@@ -92,6 +256,7 @@ class Renderer:
         player_label: str,
         story_title: str,
     ) -> None:
+        self._begin_tooltip_frame()
         scene = session.current_scene
         self._draw_background(scene)
         self._draw_world(scene, session, elapsed_seconds, player_label)
@@ -121,6 +286,7 @@ class Renderer:
         if scene.is_terminal and scene.ending_text:
             self._draw_ending_overlay(scene.ending_text)
 
+        self._draw_tooltip_overlay()
         pygame.display.flip()
 
     def _draw_background(self, scene: SceneState) -> None:
@@ -179,7 +345,7 @@ class Renderer:
         if sprite is not None:
             sprite_rect = sprite.get_rect(midbottom=(x, y + 42))
             self._surface.blit(sprite, sprite_rect)
-            self._draw_label(npc.name, (x, sprite_rect.y - 26), style.text)
+            self._draw_label(npc.name, (x, sprite_rect.y - 26), style.text, max_width=150)
             return
 
         body_rect = pygame.Rect(x - 28, y - 72, 56, 108)
@@ -187,7 +353,7 @@ class Renderer:
         pygame.draw.rect(self._surface, style.outline, body_rect, width=3, border_radius=18)
         pygame.draw.circle(self._surface, style.fill, (x, y - 92), 24)
         pygame.draw.circle(self._surface, style.outline, (x, y - 92), 24, width=3)
-        self._draw_label(npc.name, (x, y - 134), style.text)
+        self._draw_label(npc.name, (x, y - 134), style.text, max_width=150)
 
     def _draw_interactable(self, interactable: Interactable, active: bool) -> None:
         style = self._resolver.resolve_interactable_style(interactable.id)
@@ -213,13 +379,13 @@ class Renderer:
         if sprite is not None:
             sprite_rect = sprite.get_rect(midbottom=(x, y + 30))
             self._surface.blit(sprite, sprite_rect)
-            self._draw_label(interactable.name, (x, sprite_rect.y - 18), style.text)
+            self._draw_label(interactable.name, (x, sprite_rect.y - 18), style.text, max_width=150)
             return
 
         rect = pygame.Rect(x - 28, y - 28, 56, 56)
         pygame.draw.rect(self._surface, style.fill, rect, border_radius=14)
         pygame.draw.rect(self._surface, style.outline, rect, width=3, border_radius=14)
-        self._draw_label(interactable.name, (x, y - 44), style.text)
+        self._draw_label(interactable.name, (x, y - 44), style.text, max_width=150)
 
     def _draw_player(self, player_position: tuple[float, float], player_label: str) -> None:
         style = self._resolver.resolve_player_style()
@@ -233,7 +399,7 @@ class Renderer:
         pygame.draw.rect(self._surface, style.outline, body_rect, width=3, border_radius=14)
         pygame.draw.circle(self._surface, style.fill, (x, y - 54), 17)
         pygame.draw.circle(self._surface, style.outline, (x, y - 54), 17, width=3)
-        self._draw_label(player_label, (x, y - 86), style.text)
+        self._draw_label(player_label, (x, y - 86), style.text, max_width=150)
 
     def _draw_hud(
         self,
@@ -252,26 +418,38 @@ class Renderer:
             width=2,
         )
 
-        self._blit_lines(
-            [f"场景: {scene.scene.description}"],
+        self._blit_clamped_line(
             self._title_font,
+            f"场景: {scene.scene.description}",
             (36, self._hud_top + 24),
             (242, 238, 229),
+            780,
         )
-        self._blit_lines(
-            wrap_text(scene.narrative, self._body_font, 760),
+        self._blit_preview_block(
             self._body_font,
+            scene.narrative,
             (36, self._hud_top + 72),
             (219, 221, 229),
+            760,
+            3,
             line_gap=6,
         )
 
         if session.local_message:
-            self._blit_lines(
-                ["本地反馈："] + wrap_text(session.local_message, self._small_font, 760),
+            self._blit_clamped_line(
                 self._small_font,
+                "本地反馈：",
                 (36, self._hud_top + 150),
                 (237, 221, 189),
+                760,
+            )
+            self._blit_preview_block(
+                self._small_font,
+                session.local_message,
+                (36, self._hud_top + 172),
+                (237, 221, 189),
+                760,
+                2,
                 line_gap=5,
             )
 
@@ -285,7 +463,13 @@ class Renderer:
             "交互: 上下切选项，Enter/Space 确认",
             "快捷: 数字键 1-9 直接选项，T 提前结算/重试，R 重开，M 返回菜单，Esc 退出",
         ]
-        self._blit_lines(summary_lines, self._small_font, (870, self._hud_top + 30), (197, 205, 219))
+        self._blit_clamped_lines(
+            summary_lines,
+            self._small_font,
+            (870, self._hud_top + 30),
+            (197, 205, 219),
+            360,
+        )
 
         round_lines = ["本轮行动:"]
         if session.round_actions:
@@ -293,7 +477,13 @@ class Renderer:
                 round_lines.append(f"{record.turn_index}. {record.label}")
         else:
             round_lines.append("尚未消耗行动点")
-        self._blit_lines(round_lines, self._small_font, (870, self._hud_top + 190), (237, 221, 189))
+        self._blit_clamped_lines(
+            round_lines,
+            self._small_font,
+            (870, self._hud_top + 190),
+            (237, 221, 189),
+            170,
+        )
 
         settled_lines = ["已结算记录:"]
         if session.settled_action_history:
@@ -301,16 +491,22 @@ class Renderer:
                 settled_lines.append(f"{record.turn_index}. {record.label}")
         else:
             settled_lines.append("暂无")
-        self._blit_lines(
+        self._blit_clamped_lines(
             settled_lines,
             self._small_font,
             (1060, self._hud_top + 190),
             (215, 219, 228),
+            170,
         )
 
         if session.needs_settlement and not session.loading and not scene.is_terminal:
-            hint = self._small_font.render("本轮行动点已耗尽，按 T 立即结算。", True, (238, 199, 132))
-            self._surface.blit(hint, (36, self._height - 36))
+            self._blit_clamped_line(
+                self._small_font,
+                "本轮行动点已耗尽，按 T 立即结算。",
+                (36, self._height - 36),
+                (238, 199, 132),
+                self._width - 72,
+            )
 
     def _draw_option_popup(
         self,
@@ -324,8 +520,13 @@ class Renderer:
         pygame.draw.rect(self._surface, (12, 16, 24), popup_rect, border_radius=18)
         pygame.draw.rect(self._surface, (120, 135, 166), popup_rect, width=2, border_radius=18)
 
-        title = self._title_font.render(interactable.name, True, (245, 236, 222))
-        self._surface.blit(title, (popup_rect.x + 22, popup_rect.y + 18))
+        self._blit_clamped_line(
+            self._title_font,
+            interactable.name,
+            (popup_rect.x + 22, popup_rect.y + 18),
+            (245, 236, 222),
+            popup_rect.width - 44,
+        )
 
         for index, option in enumerate(options):
             option_rect = pygame.Rect(
@@ -338,8 +539,15 @@ class Renderer:
             fill = (227, 197, 124) if is_selected else (35, 43, 61)
             text_color = (28, 22, 15) if is_selected else (226, 230, 238)
             pygame.draw.rect(self._surface, fill, option_rect, border_radius=10)
-            label = self._body_font.render(f"{index + 1}. {option.label}", True, text_color)
-            self._surface.blit(label, (option_rect.x + 12, option_rect.y + 5))
+            self._blit_clamped_line(
+                self._body_font,
+                f"{index + 1}. {option.label}",
+                (option_rect.x + 12, option_rect.y + 5),
+                text_color,
+                option_rect.width - 24,
+                selected=is_selected,
+                tooltip_text=option.label,
+            )
 
     def _draw_loading_overlay(self, session: GameSessionState, mode_label: str) -> None:
         overlay = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
@@ -356,37 +564,73 @@ class Renderer:
             if session.round_actions
             else "正在加载本局的初始空间布局与角色状态。"
         )
-        text = self._title_font.render(title_text, True, (245, 240, 228))
-        mode = self._body_font.render(f"当前模式: {mode_label}", True, (219, 224, 234))
-        hint = self._small_font.render(subtitle_text, True, (228, 211, 182))
-        self._surface.blit(text, (self._width // 2 - text.get_width() // 2, 170))
-        self._surface.blit(mode, (self._width // 2 - mode.get_width() // 2, 216))
-        self._surface.blit(hint, (self._width // 2 - hint.get_width() // 2, 250))
+        self._blit_clamped_line(
+            self._title_font,
+            title_text,
+            (self._width // 2, 170),
+            (245, 240, 228),
+            self._width - 120,
+            align="center",
+        )
+        self._blit_clamped_line(
+            self._body_font,
+            f"当前模式: {mode_label}",
+            (self._width // 2, 216),
+            (219, 224, 234),
+            self._width - 160,
+            align="center",
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            subtitle_text,
+            (self._width // 2, 250),
+            (228, 211, 182),
+            self._width - 140,
+            align="center",
+        )
 
     def _draw_ending_overlay(self, ending_text: str) -> None:
         overlay = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
         overlay.fill((7, 7, 10, 198))
         self._surface.blit(overlay, (0, 0))
 
-        title = self._title_font.render("结局已达成", True, (245, 236, 220))
-        self._surface.blit(title, (self._width // 2 - title.get_width() // 2, 96))
-        self._blit_lines(
-            wrap_text(ending_text, self._body_font, 720),
+        self._blit_clamped_line(
+            self._title_font,
+            "结局已达成",
+            (self._width // 2, 96),
+            (245, 236, 220),
+            320,
+            align="center",
+        )
+        self._blit_preview_block(
             self._body_font,
+            ending_text,
             (self._width // 2 - 360, 150),
             (232, 236, 244),
+            720,
+            7,
             line_gap=8,
         )
-        hint = self._small_font.render("按 R 重新开始，按 Esc 退出", True, (233, 200, 131))
-        self._surface.blit(hint, (self._width // 2 - hint.get_width() // 2, 330))
+        self._blit_clamped_line(
+            self._small_font,
+            "按 R 重新开始，按 Esc 退出",
+            (self._width // 2, 330),
+            (233, 200, 131),
+            420,
+            align="center",
+        )
 
     def _draw_error_banner(self, message: str) -> None:
         banner_rect = pygame.Rect(24, 18, self._width - 48, 46)
         pygame.draw.rect(self._surface, (134, 34, 30), banner_rect, border_radius=12)
         pygame.draw.rect(self._surface, (255, 196, 184), banner_rect, width=2, border_radius=12)
-        preview = self._fit_text(message, self._small_font, banner_rect.width - 28)
-        text = self._small_font.render(preview, True, (255, 242, 236))
-        self._surface.blit(text, (banner_rect.x + 14, banner_rect.y + 13))
+        self._blit_clamped_line(
+            self._small_font,
+            message,
+            (banner_rect.x + 14, banner_rect.y + 13),
+            (255, 242, 236),
+            banner_rect.width - 28,
+        )
 
     def _load_asset_surface(
         self,
@@ -447,32 +691,22 @@ class Renderer:
 
         return npc.position
 
-    def _draw_label(self, text: str, position: tuple[int, int], color: Color) -> None:
-        label = self._small_font.render(text, True, color)
-        self._surface.blit(label, (position[0] - label.get_width() // 2, position[1]))
-
-    def _fit_text(self, text: str, font: Any, max_width: int) -> str:
-        if max_width <= 0 or font.size(text)[0] <= max_width:
-            return text
-
-        candidate = text
-        while candidate and font.size(candidate + "...")[0] > max_width:
-            candidate = candidate[:-1]
-        return (candidate or "") + "..."
-
-    def _blit_lines(
+    def _draw_label(
         self,
-        lines: list[str],
-        font: Any,
+        text: str,
         position: tuple[int, int],
         color: Color,
-        line_gap: int = 4,
+        *,
+        max_width: int = 160,
     ) -> None:
-        x, y = position
-        for line in lines:
-            rendered = font.render(line, True, color)
-            self._surface.blit(rendered, (x, y))
-            y += rendered.get_height() + line_gap
+        self._blit_clamped_line(
+            self._small_font,
+            text,
+            position,
+            color,
+            max_width,
+            align="center",
+        )
 
 
 def _lerp_color(left: Color, right: Color, ratio: float) -> Color:
@@ -487,7 +721,7 @@ def _tint(color: Color, delta: int) -> Color:
     return tuple(max(0, min(255, channel + delta)) for channel in color)
 
 
-class MenuRenderer:
+class MenuRenderer(TooltipMixin):
     """Renderer for the main menu, dossier browser, settings and modal overlays."""
 
     def __init__(self, surface: pygame.Surface, width: int, height: int):
@@ -499,6 +733,8 @@ class MenuRenderer:
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28, bold=True)
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 15)
+        self._tooltip_targets: list[TooltipTarget] = []
+        self._mouse_pos = (0, 0)
 
     def draw_main_menu(
         self,
@@ -507,6 +743,7 @@ class MenuRenderer:
         selected_index: int,
         status_text: str | None,
     ) -> None:
+        self._begin_tooltip_frame()
         self._draw_background()
         self._draw_chrome(background.game_title, background.game_subtitle, background.operator_name)
 
@@ -515,24 +752,42 @@ class MenuRenderer:
         self._panel(left_panel, (16, 21, 28))
         self._panel(right_panel, (27, 22, 19))
 
-        hero = self._hero_font.render("案件模拟台", True, (243, 232, 207))
-        self._surface.blit(hero, (82, 182))
-        intro_lines = clamp_lines(
-            wrap_text(background.menu_intro, self._body_font, left_panel.width - 58),
-            4,
+        self._blit_clamped_line(
+            self._hero_font,
+            "案件模拟台",
+            (82, 182),
+            (243, 232, 207),
+            left_panel.width - 58,
         )
-        self._blit_lines(intro_lines, self._body_font, (82, 276), (232, 235, 239), 8)
+        self._blit_preview_block(
+            self._body_font,
+            background.menu_intro,
+            (82, 276),
+            (232, 235, 239),
+            left_panel.width - 58,
+            4,
+            line_gap=8,
+        )
 
         self._section_title("江川的动机", 82, 394)
-        background_lines = clamp_lines(
-            wrap_text(background.background, self._small_font, left_panel.width - 58),
+        self._blit_preview_block(
+            self._small_font,
+            background.background,
+            (82, 430),
+            (208, 214, 224),
+            left_panel.width - 58,
             7,
+            line_gap=6,
         )
-        self._blit_lines(background_lines, self._small_font, (82, 430), (208, 214, 224), 6)
 
         self._section_title("主菜单", 674, 188)
-        menu_intro = self._small_font.render("先选择你的行动方向，再进入具体卷宗。", True, (224, 225, 232))
-        self._surface.blit(menu_intro, (674, 226))
+        self._blit_clamped_line(
+            self._small_font,
+            "先选择你的行动方向，再进入具体卷宗。",
+            (674, 226),
+            (224, 225, 232),
+            516,
+        )
 
         for index, option in enumerate(options):
             option_rect = pygame.Rect(674, 276 + index * 88, 516, 66)
@@ -542,13 +797,29 @@ class MenuRenderer:
             text_color = (29, 22, 15) if selected else (236, 239, 244)
             pygame.draw.rect(self._surface, fill, option_rect, border_radius=18)
             pygame.draw.rect(self._surface, border, option_rect, width=2, border_radius=18)
-            label = self._title_font.render(option, True, text_color)
-            hint = self._small_font.render(self._main_menu_hint(option), True, text_color)
-            self._surface.blit(label, (option_rect.x + 20, option_rect.y + 14))
-            self._surface.blit(hint, (option_rect.x + 22, option_rect.y + 42))
+            self._blit_clamped_line(
+                self._title_font,
+                option,
+                (option_rect.x + 20, option_rect.y + 14),
+                text_color,
+                option_rect.width - 40,
+                selected=selected,
+                tooltip_text=option,
+            )
+            hint_text = self._main_menu_hint(option)
+            self._blit_clamped_line(
+                self._small_font,
+                hint_text,
+                (option_rect.x + 22, option_rect.y + 42),
+                text_color,
+                option_rect.width - 44,
+                selected=selected,
+                tooltip_text=hint_text,
+            )
 
         footer = "主菜单控制: 上下切换 | Enter 确认 | Esc 退出"
         self._draw_footer(footer, status_text)
+        self._draw_tooltip_overlay()
         pygame.display.flip()
 
     def draw_story_browser(
@@ -561,6 +832,7 @@ class MenuRenderer:
         focus: str,
         detail_modal: Any | None,
     ) -> None:
+        self._begin_tooltip_frame()
         self._draw_background()
         self._draw_chrome(background.game_title, "卷宗选择", background.operator_name)
 
@@ -584,12 +856,14 @@ class MenuRenderer:
             focused=focus == "story",
         )
         ranking_text = " | ".join(rank.rank for rank in story.rankings[:4])
-        ranking_label = self._small_font.render(
-            self._fit_text(f"评级: {ranking_text}", self._small_font, left.width - 48),
-            True,
+        self._blit_clamped_line(
+            self._small_font,
+            f"评级: {ranking_text}",
+            (left.x + 24, left.bottom - 40),
             (203, 210, 220),
+            left.width - 48,
+            selected=focus == "story",
         )
-        self._surface.blit(ranking_label, (left.x + 24, left.bottom - 40))
 
         self._section_title("嫌疑人身份", right.x + 22, right.y + 18)
         self._draw_summary_card(
@@ -610,6 +884,7 @@ class MenuRenderer:
         self._draw_footer(footer, None)
         if detail_modal is not None:
             self._draw_detail_modal(detail_modal)
+        self._draw_tooltip_overlay()
         pygame.display.flip()
 
     def draw_settings(
@@ -622,6 +897,7 @@ class MenuRenderer:
         input_buffer: str,
         status_text: str | None,
     ) -> None:
+        self._begin_tooltip_frame()
         self._draw_background()
         self._draw_chrome(background.game_title, "选项设置", background.operator_name)
 
@@ -629,12 +905,13 @@ class MenuRenderer:
         self._panel(panel, (16, 21, 28))
         self._section_title("运行与 AI 请求设置", panel.x + 24, panel.y + 18)
 
-        header = self._small_font.render(
+        self._blit_clamped_line(
+            self._small_font,
             "包含 AI 请求地址、API Key、模型、回退策略以及基础显示设置。选中后按 Enter 编辑，布尔项可直接切换。",
-            True,
+            (panel.x + 24, panel.y + 58),
             (219, 224, 231),
+            panel.width - 48,
         )
-        self._surface.blit(header, (panel.x + 24, panel.y + 58))
 
         for index, (field_name, label, field_kind) in enumerate(fields):
             row = pygame.Rect(panel.x + 24, panel.y + 96 + index * 52, panel.width - 48, 42)
@@ -645,22 +922,24 @@ class MenuRenderer:
             pygame.draw.rect(self._surface, fill, row, border_radius=12)
             pygame.draw.rect(self._surface, border, row, width=2, border_radius=12)
 
-            name_label = self._small_font.render(
-                self._fit_text(label, self._small_font, 250),
-                True,
+            full_value = self._format_setting_value(field_name, field_kind, draft)
+            self._blit_clamped_line(
+                self._small_font,
+                label,
+                (row.x + 14, row.y + 11),
                 text_color,
+                250,
+                selected=selected,
             )
-            value_label = self._small_font.render(
-                self._fit_text(
-                    self._format_setting_value(field_name, field_kind, draft),
-                    self._small_font,
-                    row.width - 320,
-                ),
-                True,
+            self._blit_clamped_line(
+                self._small_font,
+                full_value,
+                (row.x + 280, row.y + 11),
                 text_color,
+                row.width - 320,
+                selected=selected,
+                tooltip_text=f"{label}: {full_value}",
             )
-            self._surface.blit(name_label, (row.x + 14, row.y + 11))
-            self._surface.blit(value_label, (row.x + 280, row.y + 11))
 
         tips = [
             "必要设置:",
@@ -669,7 +948,14 @@ class MenuRenderer:
             "3. 模型名与回退策略",
             "4. 窗口标题与帧率",
         ]
-        self._blit_lines(tips, self._small_font, (panel.x + 24, panel.bottom - 112), (230, 210, 167), 5)
+        self._blit_clamped_lines(
+            tips,
+            self._small_font,
+            (panel.x + 24, panel.bottom - 112),
+            (230, 210, 167),
+            panel.width - 48,
+            line_gap=5,
+        )
         footer = "设置页控制: 上下切换 | Enter 编辑/切换 | 左右切换布尔值 | S 保存 | D 放弃修改 | Backspace 返回"
         self._draw_footer(footer, status_text)
 
@@ -679,6 +965,7 @@ class MenuRenderer:
                 value=input_buffer,
                 masked=editing_field == "api_key",
             )
+        self._draw_tooltip_overlay()
         pygame.display.flip()
 
     def _draw_background(self) -> None:
@@ -699,15 +986,29 @@ class MenuRenderer:
         pygame.draw.rect(self._surface, (19, 24, 33), header_rect, border_radius=20)
         pygame.draw.rect(self._surface, (201, 169, 111), header_rect, width=2, border_radius=20)
 
-        title = self._display_font.render(title_text, True, (244, 232, 207))
-        subtitle = self._small_font.render(subtitle_text, True, (212, 213, 222))
-        badge = self._small_font.render(f"操作员 {operator_name}", True, (36, 28, 18))
-
         badge_rect = pygame.Rect(self._width - 208, 42, 154, 34)
         pygame.draw.rect(self._surface, (228, 194, 131), badge_rect, border_radius=12)
-        self._surface.blit(title, (58, 34))
-        self._surface.blit(subtitle, (60, 78))
-        self._surface.blit(badge, (badge_rect.x + 18, badge_rect.y + 9))
+        self._blit_clamped_line(
+            self._display_font,
+            title_text,
+            (58, 34),
+            (244, 232, 207),
+            header_rect.width - 250,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            subtitle_text,
+            (60, 78),
+            (212, 213, 222),
+            header_rect.width - 260,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            f"操作员 {operator_name}",
+            (badge_rect.x + 18, badge_rect.y + 9),
+            (36, 28, 18),
+            badge_rect.width - 36,
+        )
 
     def _draw_summary_card(
         self,
@@ -723,21 +1024,47 @@ class MenuRenderer:
         pygame.draw.rect(self._surface, fill, rect, border_radius=18)
         pygame.draw.rect(self._surface, border, rect, width=2, border_radius=18)
 
-        title_surface = self._title_font.render(title, True, (244, 240, 233))
-        subtitle_surface = self._small_font.render(subtitle, True, accent)
-        self._surface.blit(title_surface, (rect.x + 18, rect.y + 16))
-        self._surface.blit(subtitle_surface, (rect.x + 18, rect.y + 54))
+        self._blit_clamped_line(
+            self._title_font,
+            title,
+            (rect.x + 18, rect.y + 16),
+            (244, 240, 233),
+            rect.width - 36,
+            selected=focused,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            subtitle,
+            (rect.x + 18, rect.y + 54),
+            accent,
+            rect.width - 36,
+            selected=focused,
+        )
 
         y = rect.y + 92
         for block in body_blocks:
-            lines = clamp_lines(wrap_text(block, self._small_font, rect.width - 36), 4)
-            self._blit_lines(lines, self._small_font, (rect.x + 18, y), (221, 225, 231), 4)
-            y += len(lines) * 22 + 12
+            block_rect = self._blit_preview_block(
+                self._small_font,
+                block,
+                (rect.x + 18, y),
+                (221, 225, 231),
+                rect.width - 36,
+                4,
+                line_gap=4,
+                selected=focused,
+            )
+            y += block_rect.height + 12
             if y > rect.bottom - 40:
                 break
 
-        hint = self._small_font.render("Enter 查看完整内容", True, accent)
-        self._surface.blit(hint, (rect.x + 18, rect.bottom - 28))
+        self._blit_clamped_line(
+            self._small_font,
+            "Enter 查看完整内容",
+            (rect.x + 18, rect.bottom - 28),
+            accent,
+            rect.width - 36,
+            selected=focused,
+        )
 
     def _draw_role_strip(self, roles: Any, selected_role: Any, x: int, y: int, width: int) -> None:
         strip = pygame.Rect(x, y, width, 156)
@@ -757,18 +1084,23 @@ class MenuRenderer:
             pygame.draw.rect(self._surface, fill, card, border_radius=16)
             pygame.draw.rect(self._surface, border, card, width=2, border_radius=16)
 
-            title = self._small_font.render(
-                self._fit_text(role.display_name, self._small_font, 220),
-                True,
+            self._blit_clamped_line(
+                self._small_font,
+                role.display_name,
+                (card.x + 12, card.y + 6),
                 title_color,
+                220,
+                selected=selected,
             )
-            tool = self._small_font.render(
-                self._fit_text(role.primary_tool_name, self._small_font, 250),
-                True,
+            self._blit_clamped_line(
+                self._small_font,
+                role.primary_tool_name,
+                (card.right - 12, card.y + 6),
                 body_color,
+                250,
+                align="right",
+                selected=selected,
             )
-            self._surface.blit(title, (card.x + 12, card.y + 6))
-            self._surface.blit(tool, (card.right - tool.get_width() - 12, card.y + 6))
 
     def _draw_detail_modal(self, modal: Any) -> None:
         overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
@@ -779,25 +1111,42 @@ class MenuRenderer:
         pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
         pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
 
-        title = self._title_font.render(modal.title, True, (247, 233, 204))
-        subtitle = self._small_font.render(modal.subtitle, True, (220, 223, 232))
-        self._surface.blit(title, (rect.x + 24, rect.y + 20))
-        self._surface.blit(subtitle, (rect.x + 24, rect.y + 58))
-
-        lines: list[str] = []
-        for block in modal.body_lines:
-            if not block:
-                lines.append(" ")
-                continue
-            lines.extend(wrap_text(block, self._small_font, rect.width - 48))
-        lines = clamp_lines(lines, 22)
-        self._blit_lines(lines, self._small_font, (rect.x + 24, rect.y + 98), (232, 235, 241), 6)
-        footer = self._small_font.render(
-            self._fit_text(modal.footer, self._small_font, rect.width - 48),
-            True,
-            (238, 199, 132),
+        self._blit_clamped_line(
+            self._title_font,
+            modal.title,
+            (rect.x + 24, rect.y + 20),
+            (247, 233, 204),
+            rect.width - 48,
         )
-        self._surface.blit(footer, (rect.x + 24, rect.bottom - 32))
+        self._blit_clamped_line(
+            self._small_font,
+            modal.subtitle,
+            (rect.x + 24, rect.y + 58),
+            (220, 223, 232),
+            rect.width - 48,
+        )
+
+        body_text = "\n\n".join(block or " " for block in modal.body_lines)
+        body_top = rect.y + 98
+        footer_top = rect.bottom - 34
+        line_height = self._small_font.get_height() + 6
+        max_lines = max(1, (footer_top - body_top) // max(line_height, 1))
+        self._blit_preview_block(
+            self._small_font,
+            body_text,
+            (rect.x + 24, body_top),
+            (232, 235, 241),
+            rect.width - 48,
+            max_lines,
+            line_gap=6,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            modal.footer,
+            (rect.x + 24, rect.bottom - 32),
+            (238, 199, 132),
+            rect.width - 48,
+        )
 
     def _draw_input_modal(self, title: str, value: str, masked: bool) -> None:
         overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
@@ -807,46 +1156,76 @@ class MenuRenderer:
         rect = pygame.Rect(236, 220, self._width - 472, 172)
         pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
         pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
-        title_surface = self._title_font.render(title, True, (247, 233, 204))
-        subtitle = self._small_font.render("Enter 保存输入 | Esc 取消", True, (220, 223, 232))
-        self._surface.blit(title_surface, (rect.x + 24, rect.y + 20))
-        self._surface.blit(subtitle, (rect.x + 24, rect.y + 56))
+        self._blit_clamped_line(
+            self._title_font,
+            title,
+            (rect.x + 24, rect.y + 20),
+            (247, 233, 204),
+            rect.width - 48,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            "Enter 保存输入 | Esc 取消",
+            (rect.x + 24, rect.y + 56),
+            (220, 223, 232),
+            rect.width - 48,
+        )
 
         input_rect = pygame.Rect(rect.x + 22, rect.y + 96, rect.width - 44, 44)
         pygame.draw.rect(self._surface, (37, 42, 52), input_rect, border_radius=12)
         pygame.draw.rect(self._surface, (226, 193, 128), input_rect, width=2, border_radius=12)
         display_value = value if not masked else "*" * len(value)
-        preview = self._fit_text(display_value or " ", self._small_font, input_rect.width - 24)
-        value_surface = self._small_font.render(preview or " ", True, (244, 240, 233))
-        self._surface.blit(value_surface, (input_rect.x + 12, input_rect.y + 13))
+        self._blit_clamped_line(
+            self._small_font,
+            display_value or " ",
+            (input_rect.x + 12, input_rect.y + 13),
+            (244, 240, 233),
+            input_rect.width - 24,
+            selected=True,
+            tooltip_text=display_value or " ",
+        )
 
     def _panel(self, rect: pygame.Rect, fill: Color) -> None:
         pygame.draw.rect(self._surface, fill, rect, border_radius=18)
         pygame.draw.rect(self._surface, (123, 118, 103), rect, width=2, border_radius=18)
 
     def _section_title(self, text: str, x: int, y: int) -> None:
-        rendered = self._title_font.render(text, True, (243, 234, 219))
-        self._surface.blit(rendered, (x, y))
+        self._blit_clamped_line(
+            self._title_font,
+            text,
+            (x, y),
+            (243, 234, 219),
+            max(120, self._width - x - 40),
+        )
 
     def _section_subtitle(self, text: str, x: int, y: int) -> None:
-        rendered = self._small_font.render(text, True, (235, 192, 125))
-        self._surface.blit(rendered, (x, y))
+        self._blit_clamped_line(
+            self._small_font,
+            text,
+            (x, y),
+            (235, 192, 125),
+            max(120, self._width - x - 40),
+        )
 
     def _draw_footer(self, text: str, status_text: str | None) -> None:
         footer_rect = pygame.Rect(34, self._height - 48, self._width - 68, 30)
-        footer = self._small_font.render(
-            self._fit_text(text, self._small_font, footer_rect.width - 320),
-            True,
+        main_width = footer_rect.width - 320 if status_text else footer_rect.width - 8
+        self._blit_clamped_line(
+            self._small_font,
+            text,
+            (footer_rect.x + 4, footer_rect.y + 4),
             (224, 229, 235),
+            max(80, main_width),
         )
-        self._surface.blit(footer, (footer_rect.x + 4, footer_rect.y + 4))
         if status_text:
-            status = self._small_font.render(
-                self._fit_text(status_text, self._small_font, 300),
-                True,
+            self._blit_clamped_line(
+                self._small_font,
+                status_text,
+                (footer_rect.right - 4, footer_rect.y + 4),
                 (237, 203, 138),
+                300,
+                align="right",
             )
-            self._surface.blit(status, (footer_rect.right - status.get_width(), footer_rect.y + 4))
 
     def _field_label(self, field_name: str, fields: list[tuple[str, str, str]]) -> str:
         for candidate_name, label, _ in fields:
@@ -876,26 +1255,3 @@ class MenuRenderer:
         if len(value) <= 8:
             return "*" * len(value)
         return f"{value[:4]}...{value[-4:]}"
-
-    def _fit_text(self, text: str, font: Any, max_width: int) -> str:
-        if max_width <= 0 or font.size(text)[0] <= max_width:
-            return text
-
-        candidate = text
-        while candidate and font.size(candidate + "…")[0] > max_width:
-            candidate = candidate[:-1]
-        return (candidate or "") + "…"
-
-    def _blit_lines(
-        self,
-        lines: list[str],
-        font: Any,
-        position: tuple[int, int],
-        color: Color,
-        line_gap: int = 4,
-    ) -> None:
-        x, y = position
-        for line in lines:
-            rendered = font.render(line, True, color)
-            self._surface.blit(rendered, (x, y))
-            y += rendered.get_height() + line_gap
