@@ -459,6 +459,7 @@ class Renderer(TooltipMixin):
             f"状态: {scene.game_status}",
             f"行动点: {session.remaining_action_points}/{session.action_points_per_round}",
             f"本轮待结算: {len(session.round_actions)}",
+            "标记: [规则] 本地执行 | [即时AI] 立即结算",
             "控制: WASD 移动",
             "交互: 上下切选项，Enter/Space 确认",
             "快捷: 数字键 1-9 直接选项，T 提前结算/重试，R 重开，M 返回菜单，Esc 退出",
@@ -539,14 +540,21 @@ class Renderer(TooltipMixin):
             fill = (227, 197, 124) if is_selected else (35, 43, 61)
             text_color = (28, 22, 15) if is_selected else (226, 230, 238)
             pygame.draw.rect(self._surface, fill, option_rect, border_radius=10)
+            resolution_label = "即时AI" if option.resolution_mode == "immediate_ai" else "规则"
+            option_text = f"{index + 1}. {option.label} [{resolution_label}]"
+            tooltip_text = (
+                f"{option.label}\n选择后立即请求 AI 裁决本轮结果。"
+                if option.resolution_mode == "immediate_ai"
+                else f"{option.label}\n该动作按本地规则即时处理，通常不会立刻请求 AI。"
+            )
             self._blit_clamped_line(
                 self._body_font,
-                f"{index + 1}. {option.label}",
+                option_text,
                 (option_rect.x + 12, option_rect.y + 5),
                 text_color,
                 option_rect.width - 24,
                 selected=is_selected,
-                tooltip_text=option.label,
+                tooltip_text=tooltip_text,
             )
 
     def _draw_loading_overlay(self, session: GameSessionState, mode_label: str) -> None:

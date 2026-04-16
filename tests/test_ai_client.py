@@ -54,6 +54,7 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
             interactable_name=interactable_name,
             label=label,
             action_id=action_id,
+            resolution_mode="immediate_ai" if action_id.startswith("execute_") else "local_rule",
         )
         scene = client.generate_next_scene(premise, scene, history, choice)
         history.append(choice.to_record())
@@ -91,6 +92,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
 
     response_input = client._build_response_input(
         AIRequestPayload(
+            request_type="initial_scene",
             premise=premise,
             current_scene=None,
             history=(),
@@ -105,6 +107,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert isinstance(response_input[1]["content"], str)
     assert '"scene_layout"' in response_input[1]["content"]
     assert '"coordinate_system": "pixel"' in response_input[1]["content"]
+    assert '"balancing_goal"' in response_input[1]["content"]
     assert '"recent_actions"' in response_input[1]["content"]
 
 

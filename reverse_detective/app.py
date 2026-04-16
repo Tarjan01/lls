@@ -359,7 +359,9 @@ class GameApp:
             choice = self._session.choose_option_by_index(self._session.selected_option_index)
             if choice is not None:
                 resolution = self._session.apply_choice(choice)
-                if resolution.should_settle:
+                if resolution.requires_immediate_ai:
+                    self._submit_settlement_request(request_type="forced_immediate_choice")
+                elif resolution.should_settle:
                     self._submit_settlement_request()
             return
 
@@ -368,7 +370,9 @@ class GameApp:
             choice = self._session.choose_option_by_index(option_index)
             if choice is not None:
                 resolution = self._session.apply_choice(choice)
-                if resolution.should_settle:
+                if resolution.requires_immediate_ai:
+                    self._submit_settlement_request(request_type="forced_immediate_choice")
+                elif resolution.should_settle:
                     self._submit_settlement_request()
 
     def _update_movement(self, delta_time: float) -> None:
@@ -483,7 +487,11 @@ class GameApp:
         )
         worker.start()
 
-    def _submit_settlement_request(self) -> None:
+    def _submit_settlement_request(
+        self,
+        *,
+        request_type: Literal["round_settlement", "forced_immediate_choice"] = "round_settlement",
+    ) -> None:
         if (
             self._session is None
             or self._premise is None
@@ -498,6 +506,8 @@ class GameApp:
         round_actions_snapshot = list(self._session.round_actions)
         scene_snapshot = self._session.current_scene
         premise_snapshot = self._premise
+        if request_type == "forced_immediate_choice":
+            self._session.local_message = "关键行动已触发，AI 正在立即裁决本轮走向。"
         self._session.begin_settlement()
         worker = threading.Thread(
             target=self._run_settlement_request,
@@ -507,6 +517,7 @@ class GameApp:
                 settled_history_snapshot,
                 round_actions_snapshot,
                 scene_snapshot,
+                request_type,
             ),
             daemon=True,
         )
@@ -535,6 +546,7 @@ class GameApp:
         settled_history_snapshot: list,
         round_actions_snapshot: list,
         scene_snapshot: SceneState,
+        request_type: Literal["round_settlement", "forced_immediate_choice"],
     ) -> None:
         try:
             scene = self._ai_client.settle_round(
@@ -542,6 +554,7 @@ class GameApp:
                 scene_snapshot,
                 settled_history_snapshot,
                 round_actions_snapshot,
+                request_type=request_type,
             )
             self._result_queue.put(
                 WorkerResult(request_id=request_id, kind="settlement", scene=scene, error=None)

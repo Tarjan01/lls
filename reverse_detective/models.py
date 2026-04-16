@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import Literal, Mapping
 
 GameStatus = Literal["ongoing", "player_win", "player_lose", "special_ending"]
+ActionResolutionMode = Literal["local_rule", "immediate_ai"]
 Point = tuple[int, int]
 PatrolPath = tuple[Point, ...]
 
@@ -57,6 +58,7 @@ class ActionLocalLogic:
 class ActionOption:
     label: str
     action_id: str
+    resolution_mode: ActionResolutionMode = "local_rule"
     local_logic: ActionLocalLogic | None = None
 
 
@@ -206,6 +208,7 @@ class ActionRecord:
     interactable_name: str
     label: str
     action_id: str
+    resolution_mode: ActionResolutionMode = "local_rule"
 
 
 def build_loading_scene(narrative: str = "案件生成中，请稍候。") -> SceneState:

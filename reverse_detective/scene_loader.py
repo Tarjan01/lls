@@ -9,6 +9,7 @@ from typing import Any
 from reverse_detective.models import (
     ActionLocalLogic,
     ActionOption,
+    ActionResolutionMode,
     Interactable,
     InteractableState,
     NPC,
@@ -23,8 +24,9 @@ class SceneValidationError(ValueError):
 
 
 _INTERACTABLE_STATE_KEYS = {"opened", "locked", "hidden", "disabled"}
-_OPTION_KEYS = {"label", "action_id", "local_logic"}
+_OPTION_KEYS = {"label", "action_id", "resolution_mode", "local_logic"}
 _LOCAL_LOGIC_KEYS = {"requires_state", "set_state", "success_text", "failure_text"}
+_RESOLUTION_MODES: set[ActionResolutionMode] = {"local_rule", "immediate_ai"}
 
 
 def load_scene_payload(payload: str | Mapping[str, Any]) -> SceneState:
@@ -104,6 +106,7 @@ def scene_to_dict(scene: SceneState) -> dict[str, Any]:
                     {
                         "label": option.label,
                         "action_id": option.action_id,
+                        "resolution_mode": option.resolution_mode,
                         "local_logic": None
                         if option.local_logic is None
                         else {
@@ -206,6 +209,10 @@ def _parse_option(value: Any, option_index: int, parent_path: str) -> ActionOpti
     return ActionOption(
         label=_require_non_empty_string(option_data["label"], f"{path}.label"),
         action_id=_require_non_empty_string(option_data["action_id"], f"{path}.action_id"),
+        resolution_mode=_require_resolution_mode(
+            option_data.get("resolution_mode", "local_rule"),
+            f"{path}.resolution_mode",
+        ),
         local_logic=local_logic,
     )
 
@@ -306,6 +313,15 @@ def _require_game_status(value: Any, path: str) -> str:
             f"{path} must be one of {sorted(valid_statuses)!r}, got {status!r}."
         )
     return status
+
+
+def _require_resolution_mode(value: Any, path: str) -> ActionResolutionMode:
+    mode = _require_non_empty_string(value, path)
+    if mode not in _RESOLUTION_MODES:
+        raise SceneValidationError(
+            f"{path} must be one of {sorted(_RESOLUTION_MODES)!r}, got {mode!r}."
+        )
+    return mode
 
 
 def _require_exact_keys(value: Mapping[str, Any], expected: set[str], path: str) -> None:

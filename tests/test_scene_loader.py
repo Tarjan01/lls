@@ -35,7 +35,11 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
                 "image": "item_gloves.png",
                 "position": [220, 450],
                 "options": [
-                    {"label": "戴上手套", "action_id": "wear_gloves"},
+                    {
+                        "label": "戴上手套",
+                        "action_id": "wear_gloves",
+                        "resolution_mode": "local_rule",
+                    },
                     {"label": "继续观察", "action_id": "leave_gloves"},
                 ],
             }
@@ -50,6 +54,8 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
     assert scene.scene.background_image == "scene_villa_hall.png"
     assert scene.npcs[1].patrol == ((240, 270), (420, 270))
     assert scene.interactables[0].options[0].action_id == "wear_gloves"
+    assert scene.interactables[0].options[0].resolution_mode == "local_rule"
+    assert scene.interactables[0].options[1].resolution_mode == "local_rule"
     assert scene_to_dict(scene)["game_status"] == "ongoing"
 
 
@@ -191,6 +197,7 @@ def test_load_scene_payload_parses_interactable_state_and_local_logic() -> None:
                     {
                         "label": "撬开门锁",
                         "action_id": "unlock_door",
+                        "resolution_mode": "immediate_ai",
                         "local_logic": {
                             "requires_state": {"locked": True},
                             "set_state": {"locked": False},
@@ -211,6 +218,40 @@ def test_load_scene_payload_parses_interactable_state_and_local_logic() -> None:
 
     assert scene.interactables[0].state.locked is True
     assert scene.interactables[0].options[0].local_logic is not None
+    assert scene.interactables[0].options[0].resolution_mode == "immediate_ai"
     assert scene.interactables[0].options[0].local_logic.set_state == {"locked": False}
     assert roundtrip["interactables"][0]["state"]["locked"] is True
+    assert roundtrip["interactables"][0]["options"][0]["resolution_mode"] == "immediate_ai"
     assert roundtrip["interactables"][0]["options"][0]["local_logic"]["success_text"] == "门锁弹开了。"
+
+
+def test_load_scene_payload_rejects_invalid_resolution_mode() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "判定模式测试",
+        },
+        "npcs": [],
+        "interactables": [
+            {
+                "id": "door",
+                "name": "门",
+                "image": "door.png",
+                "position": [360, 220],
+                "options": [
+                    {
+                        "label": "强行闯入",
+                        "action_id": "rush_in",
+                        "resolution_mode": "unknown_mode",
+                    }
+                ],
+            }
+        ],
+        "narrative": "无效的判定模式不应通过。",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    with pytest.raises(SceneValidationError, match="resolution_mode must be one of"):
+        load_scene_payload(payload)

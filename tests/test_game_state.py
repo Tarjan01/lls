@@ -68,6 +68,26 @@ def _build_local_logic_scene():
                         }
                     ],
                 },
+                {
+                    "id": "target_window",
+                    "name": "视线盲区",
+                    "image": "window.png",
+                    "position": [920, 260],
+                    "state": {
+                        "opened": False,
+                        "locked": False,
+                        "hidden": False,
+                        "disabled": False,
+                    },
+                    "options": [
+                        {
+                            "label": "执行关键动作",
+                            "action_id": "critical_move",
+                            "resolution_mode": "immediate_ai",
+                            "local_logic": None
+                        }
+                    ],
+                },
             ],
             "narrative": "测试本地交互与行动点。",
             "game_status": "ongoing",
@@ -127,3 +147,20 @@ def test_finish_settlement_moves_round_actions_into_history() -> None:
     assert len(session.round_actions) == 0
     assert len(session.settled_action_history) == 1
     assert session.remaining_action_points == session.action_points_per_round
+
+
+def test_game_state_immediate_ai_option_forces_early_settlement() -> None:
+    session = GameSessionState.create(build_default_premise())
+    session.finish_initial_scene(_build_local_logic_scene())
+
+    session.set_active_interactable("target_window")
+    choice = session.choose_option_by_index(0)
+    assert choice is not None
+    assert choice.resolution_mode == "immediate_ai"
+
+    resolution = session.apply_choice(choice)
+
+    assert resolution.requires_immediate_ai is True
+    assert resolution.should_settle is True
+    assert session.remaining_action_points == 4
+    assert session.round_actions[-1].resolution_mode == "immediate_ai"

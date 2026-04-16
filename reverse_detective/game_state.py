@@ -12,6 +12,7 @@ from reverse_detective.local_logic import (
 from reverse_detective.models import (
     ActionOption,
     ActionRecord,
+    ActionResolutionMode,
     Interactable,
     SceneState,
     StoryPremise,
@@ -26,6 +27,7 @@ class PendingChoice:
     interactable_name: str
     label: str
     action_id: str
+    resolution_mode: ActionResolutionMode = "local_rule"
 
     def to_record(self) -> ActionRecord:
         return ActionRecord(
@@ -34,6 +36,7 @@ class PendingChoice:
             interactable_name=self.interactable_name,
             label=self.label,
             action_id=self.action_id,
+            resolution_mode=self.resolution_mode,
         )
 
 
@@ -42,6 +45,7 @@ class ChoiceResolution:
     record: ActionRecord
     message: str | None
     should_settle: bool
+    requires_immediate_ai: bool = False
 
 
 @dataclass(slots=True)
@@ -147,6 +151,7 @@ class GameSessionState:
             interactable_name=interactable.name,
             label=option.label,
             action_id=option.action_id,
+            resolution_mode=option.resolution_mode,
         )
 
     def available_options_for(self, interactable: Interactable) -> tuple[ActionOption, ...]:
@@ -209,10 +214,12 @@ class GameSessionState:
         self.error_message = None
         self.active_interactable_id = None
         self.selected_option_index = 0
+        requires_immediate_ai = option.resolution_mode == "immediate_ai"
         return ChoiceResolution(
             record=record,
             message=outcome.message,
-            should_settle=self.needs_settlement,
+            should_settle=requires_immediate_ai or self.needs_settlement,
+            requires_immediate_ai=requires_immediate_ai,
         )
 
     def finish_initial_scene(self, scene: SceneState) -> None:
