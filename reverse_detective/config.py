@@ -11,6 +11,7 @@ import tomllib
 
 DEFAULT_CONFIG_PATH = Path("config.toml")
 DEFAULT_CREDENTIALS_PATH = Path("~/.reverse_detective/credentials.json").expanduser()
+DEFAULT_AI_TIMEOUT_SECONDS = 120.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,7 +60,7 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             base_url=str(ai_data.get("base_url", "")).strip(),
             model=str(ai_data.get("model", "gpt-4.1-mini")),
             reasoning_effort=str(ai_data.get("reasoning_effort", "high")).strip() or "high",
-            timeout_seconds=float(ai_data.get("timeout_seconds", 30)),
+            timeout_seconds=float(ai_data.get("timeout_seconds", DEFAULT_AI_TIMEOUT_SECONDS)),
             disable_response_storage=bool(ai_data.get("disable_response_storage", True)),
             use_mock_when_unconfigured=bool(ai_data.get("use_mock_when_unconfigured", True)),
             fallback_to_mock_on_error=bool(ai_data.get("fallback_to_mock_on_error", True)),

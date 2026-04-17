@@ -320,7 +320,18 @@ def test_live_transport_error_message_includes_base_url_and_hint(tmp_path: Path)
 
     assert "https://apikey.soxio.me/openai" in message
     assert "timeout_seconds=30" in message
+    assert "stream_deadline_seconds=" in message
     assert "降到 medium" in message
+
+
+def test_live_timeout_expands_stream_read_deadline_for_normal_requests(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    deadline_seconds = client._live_overall_deadline_seconds(45)
+    timeout = client._build_live_timeout(45)
+
+    assert deadline_seconds > 45
+    assert timeout.read == deadline_seconds
 
 
 def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:

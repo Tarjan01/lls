@@ -76,6 +76,9 @@ ACTION_POINTS_PER_SETTLEMENT = 5
 LIVE_RETRYABLE_REASONS = ("xhigh", "high", "medium", "low")
 INITIAL_SCENE_CACHE_VERSION = 1
 DEFAULT_INITIAL_SCENE_CACHE_ROOT = Path("~/.reverse_detective/cache/initial_scenes").expanduser()
+SHORT_TIMEOUT_OVERALL_BUFFER_SECONDS = 0.5
+STREAM_DEADLINE_MIN_BUFFER_SECONDS = 20.0
+STREAM_DEADLINE_BUFFER_MULTIPLIER = 1.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -324,7 +327,7 @@ class ReverseDetectiveAIClient:
 
         thread = threading.Thread(target=worker, daemon=True)
         thread.start()
-        deadline_seconds = max(timeout_seconds + 0.5, 0.5)
+        deadline_seconds = self._live_overall_deadline_seconds(timeout_seconds)
 
         try:
             result_kind, payload = result_queue.get(timeout=deadline_seconds)
@@ -368,12 +371,23 @@ class ReverseDetectiveAIClient:
 
     def _build_live_timeout(self, timeout_seconds: float) -> httpx.Timeout:
         safe_total = max(10.0, timeout_seconds)
+        read_timeout = max(10.0, self._live_overall_deadline_seconds(timeout_seconds))
         return httpx.Timeout(
             connect=min(10.0, max(4.0, safe_total / 3)),
-            read=safe_total,
+            read=read_timeout,
             write=min(20.0, max(6.0, safe_total / 2)),
             pool=10.0,
         )
+
+    def _live_overall_deadline_seconds(self, timeout_seconds: float) -> float:
+        safe_total = max(0.0, timeout_seconds)
+        if safe_total < 5.0:
+            return max(safe_total + SHORT_TIMEOUT_OVERALL_BUFFER_SECONDS, SHORT_TIMEOUT_OVERALL_BUFFER_SECONDS)
+        buffer_seconds = max(
+            STREAM_DEADLINE_MIN_BUFFER_SECONDS,
+            safe_total * STREAM_DEADLINE_BUFFER_MULTIPLIER,
+        )
+        return safe_total + buffer_seconds
 
     def _is_retryable_live_error(self, exc: Exception) -> bool:
         if isinstance(exc, AIClientError):
@@ -406,7 +420,9 @@ class ReverseDetectiveAIClient:
         return (
             f"{error_type}: {details}. "
             f"请求地址 {self._config.base_url} 的网络连通或流式返回存在问题，"
-            f"timeout_seconds={self._config.timeout_seconds}，且客户端已启用总时限保护。{retry_hint}"
+            f"timeout_seconds={self._config.timeout_seconds}，"
+            f"stream_deadline_seconds={self._live_overall_deadline_seconds(self._config.timeout_seconds):.0f}，"
+            f"且客户端已启用总时限保护。{retry_hint}"
         )
 
     def _build_system_prompt(self) -> str:
