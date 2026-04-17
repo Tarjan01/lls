@@ -69,11 +69,6 @@ class TooltipMixin:
             None,
         )
         if target is None:
-            target = next(
-                (candidate for candidate in reversed(self._tooltip_targets) if candidate.selected),
-                None,
-            )
-        if target is None:
             return
 
         tooltip_width = min(max(target.preferred_width, 220), self._width - 32)
@@ -81,8 +76,8 @@ class TooltipMixin:
         line_height = self._small_font.get_height() + 4
         tooltip_height = 20 + len(lines) * line_height
 
-        anchor_x = self._mouse_pos[0] + 14 if target.rect.collidepoint(self._mouse_pos) else target.rect.left
-        anchor_y = self._mouse_pos[1] + 18 if target.rect.collidepoint(self._mouse_pos) else target.rect.bottom + 10
+        anchor_x = self._mouse_pos[0] + 14
+        anchor_y = self._mouse_pos[1] + 18
         tooltip_rect = pygame.Rect(anchor_x, anchor_y, tooltip_width, tooltip_height)
         if tooltip_rect.right > self._width - 12:
             tooltip_rect.right = self._width - 12
