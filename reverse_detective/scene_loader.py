@@ -201,18 +201,25 @@ def _parse_option(value: Any, option_index: int, parent_path: str) -> ActionOpti
     _require_allowed_keys(option_data, _OPTION_KEYS, path)
     _require_required_keys(option_data, {"label", "action_id"}, path)
 
+    resolution_mode = _require_resolution_mode(
+        option_data.get("resolution_mode", "local_rule"),
+        f"{path}.resolution_mode",
+    )
     local_logic_raw = option_data.get("local_logic")
     local_logic = (
         None if local_logic_raw is None else _parse_local_logic(local_logic_raw, f"{path}.local_logic")
     )
+    if resolution_mode == "local_rule":
+        if local_logic is None:
+            raise SceneValidationError(
+                f"{path}.local_logic must be an object for local_rule options."
+            )
+        _require_local_rule_feedback(local_logic, path)
 
     return ActionOption(
         label=_require_non_empty_string(option_data["label"], f"{path}.label"),
         action_id=_require_non_empty_string(option_data["action_id"], f"{path}.action_id"),
-        resolution_mode=_require_resolution_mode(
-            option_data.get("resolution_mode", "local_rule"),
-            f"{path}.resolution_mode",
-        ),
+        resolution_mode=resolution_mode,
         local_logic=local_logic,
     )
 
@@ -226,6 +233,17 @@ def _parse_local_logic(value: Any, path: str) -> ActionLocalLogic:
         success_text=_require_optional_string(logic_data["success_text"], f"{path}.success_text"),
         failure_text=_require_optional_string(logic_data["failure_text"], f"{path}.failure_text"),
     )
+
+
+def _require_local_rule_feedback(logic: ActionLocalLogic, path: str) -> None:
+    if logic.success_text is None:
+        raise SceneValidationError(
+            f"{path}.local_logic.success_text must be a non-empty string for local_rule options."
+        )
+    if logic.failure_text is None:
+        raise SceneValidationError(
+            f"{path}.local_logic.failure_text must be a non-empty string for local_rule options."
+        )
 
 
 def _require_partial_state_map(value: Any, path: str) -> dict[str, bool]:

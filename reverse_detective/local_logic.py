@@ -61,10 +61,13 @@ def _apply_to_interactable(
 ) -> LocalActionOutcome:
     local_logic = option.local_logic
     if local_logic is None:
-        return LocalActionOutcome(scene=scene, message=f"你执行了“{option.label}”。")
+        return LocalActionOutcome(
+            scene=scene,
+            message=_fallback_success_message(interactable, option),
+        )
 
     if not interactable.state.matches(local_logic.requires_state):
-        message = local_logic.failure_text or f"现在还不能对{interactable.name}执行“{option.label}”。"
+        message = local_logic.failure_text or _fallback_failure_message(interactable, option)
         return LocalActionOutcome(scene=scene, message=message)
 
     updated_state = interactable.state.updated(local_logic.set_state)
@@ -72,5 +75,17 @@ def _apply_to_interactable(
     updated_interactables = list(scene.interactables)
     updated_interactables[index] = updated_interactable
     updated_scene = replace(scene, interactables=tuple(updated_interactables))
-    message = local_logic.success_text or f"你完成了“{option.label}”。"
+    message = local_logic.success_text or _fallback_success_message(interactable, option)
     return LocalActionOutcome(scene=updated_scene, message=message)
+
+
+def _fallback_success_message(interactable: Interactable, option: ActionOption) -> str:
+    if option.resolution_mode == "immediate_ai":
+        return f"你选择了“{option.label}”，局势会立刻据此推进。"
+    return f"你对{interactable.name}执行了“{option.label}”，并得到了一条可继续利用的反馈。"
+
+
+def _fallback_failure_message(interactable: Interactable, option: ActionOption) -> str:
+    if option.resolution_mode == "immediate_ai":
+        return f"当前条件不足，暂时无法触发“{option.label}”。"
+    return f"现在还不能对{interactable.name}执行“{option.label}”。"

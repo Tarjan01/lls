@@ -39,8 +39,24 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
                         "label": "戴上手套",
                         "action_id": "wear_gloves",
                         "resolution_mode": "local_rule",
+                        "local_logic": {
+                            "requires_state": {"disabled": False},
+                            "set_state": {"disabled": True},
+                            "success_text": "你戴上手套，处理痕迹时会更从容。",
+                            "failure_text": "这副手套已经被你处理过了。",
+                        },
                     },
-                    {"label": "继续观察", "action_id": "leave_gloves"},
+                    {
+                        "label": "继续观察",
+                        "action_id": "leave_gloves",
+                        "resolution_mode": "local_rule",
+                        "local_logic": {
+                            "requires_state": {},
+                            "set_state": {},
+                            "success_text": "你暂时没有动这副手套，只把它的位置和可见度记在心里。",
+                            "failure_text": "你再次打量这副手套，也没有得到更多变化。",
+                        },
+                    },
                 ],
             }
         ],
@@ -120,7 +136,19 @@ def test_load_scene_payload_accepts_object_coordinates() -> None:
                 "name": "柜子",
                 "image": "item.png",
                 "position": {"x": 240, "y": 360},
-                "options": [{"label": "查看", "action_id": "inspect"}],
+                "options": [
+                    {
+                        "label": "查看",
+                        "action_id": "inspect",
+                        "resolution_mode": "local_rule",
+                        "local_logic": {
+                            "requires_state": {},
+                            "set_state": {},
+                            "success_text": "你查看了柜子表面，确认上面没有新的指纹遮掩。",
+                            "failure_text": "你再次查看柜子，也没有更多新信息。",
+                        },
+                    }
+                ],
             }
         ],
         "narrative": "当前局势",
@@ -161,7 +189,19 @@ def test_load_scene_payload_rejects_non_integral_coordinate_values() -> None:
                 "name": "柜子",
                 "image": "item.png",
                 "position": [240, 360],
-                "options": [{"label": "查看", "action_id": "inspect"}],
+                "options": [
+                    {
+                        "label": "查看",
+                        "action_id": "inspect",
+                        "resolution_mode": "local_rule",
+                        "local_logic": {
+                            "requires_state": {},
+                            "set_state": {},
+                            "success_text": "你查看了柜子表面，准备确认坐标是否合理。",
+                            "failure_text": "你再次查看柜子，也没有更多可用变化。",
+                        },
+                    }
+                ],
             }
         ],
         "narrative": "当前局势",
@@ -254,4 +294,74 @@ def test_load_scene_payload_rejects_invalid_resolution_mode() -> None:
     }
 
     with pytest.raises(SceneValidationError, match="resolution_mode must be one of"):
+        load_scene_payload(payload)
+
+
+def test_load_scene_payload_rejects_local_rule_without_local_logic() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "缺失反馈结构",
+        },
+        "npcs": [],
+        "interactables": [
+            {
+                "id": "notes",
+                "name": "便签",
+                "image": "notes.png",
+                "position": [320, 240],
+                "options": [
+                    {
+                        "label": "查看便签",
+                        "action_id": "inspect_notes",
+                        "resolution_mode": "local_rule",
+                    }
+                ],
+            }
+        ],
+        "narrative": "本地规则动作缺失反馈时不应通过校验。",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    with pytest.raises(SceneValidationError, match="must be an object for local_rule options"):
+        load_scene_payload(payload)
+
+
+def test_load_scene_payload_rejects_local_rule_without_feedback_text() -> None:
+    payload = {
+        "scene": {
+            "background_image": "bg.png",
+            "bgm": "bgm.mp3",
+            "description": "缺失反馈文本",
+        },
+        "npcs": [],
+        "interactables": [
+            {
+                "id": "notes",
+                "name": "便签",
+                "image": "notes.png",
+                "position": [320, 240],
+                "options": [
+                    {
+                        "label": "查看便签",
+                        "action_id": "inspect_notes",
+                        "resolution_mode": "local_rule",
+                        "local_logic": {
+                            "requires_state": {},
+                            "set_state": {},
+                            "success_text": "你快速扫过便签上的字迹。",
+                            "failure_text": None,
+                        },
+                    }
+                ],
+            }
+        ],
+        "narrative": "本地规则动作必须同时提供成功和失败反馈。",
+        "game_status": "ongoing",
+        "ending_text": None,
+    }
+
+    with pytest.raises(SceneValidationError, match="failure_text must be a non-empty string"):
         load_scene_payload(payload)

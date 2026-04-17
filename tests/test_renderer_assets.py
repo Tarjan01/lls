@@ -67,7 +67,19 @@ def test_renderer_draws_cached_assets(monkeypatch: pytest.MonkeyPatch, tmp_path:
                     "name": "信件",
                     "image": "item_letter_demo.png",
                     "position": [300, 400],
-                    "options": [{"label": "查看", "action_id": "inspect"}],
+                    "options": [
+                        {
+                            "label": "查看",
+                            "action_id": "inspect",
+                            "resolution_mode": "local_rule",
+                            "local_logic": {
+                                "requires_state": {},
+                                "set_state": {},
+                                "success_text": "你查看了信件封口，确认它仍保持着未被拆开的假象。",
+                                "failure_text": "你再次查看信件，也没有额外变化。",
+                            },
+                        }
+                    ],
                 }
             ],
             "narrative": "场景素材应当替代纯色占位块。",

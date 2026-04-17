@@ -463,23 +463,24 @@ class ReverseDetectiveAIClient:
             "3. Every interactable must include state with opened, locked, hidden, disabled booleans.\n"
             "4. Every option must include resolution_mode and local_logic. resolution_mode must be local_rule or immediate_ai.\n"
             "5. Prefer local_rule by default. Only mark an option as immediate_ai when it is a true key decision that can sharply change risk, social reaction, exposure, evidence, time jump, location jump, or branch outcome.\n"
-            "6. Keep immediate_ai options rare and meaningful: most ongoing scenes should have zero to two immediate_ai options total, and the majority of options should remain local_rule.\n"
+            "6. Keep immediate_ai as a minority of the total options, but do not collapse the scene into one mandatory chokepoint. Most ongoing scenes should expose two to four meaningful key decision vectors across the scene.\n"
             "7. Good local_rule examples: unlocking, opening, searching, observing, picking up known tools, simple setup, repeatable checks, deterministic positioning and disguise work.\n"
             "8. Good immediate_ai examples: committing the crime, bluffing an NPC, moving a body, destroying evidence under pressure, triggering alarms, forcing confrontation, choosing whether to flee, or any action whose outcome depends on dynamic reactions.\n"
             "9. local_logic can only describe same-object logic through requires_state and set_state, using only opened, locked, hidden, disabled.\n"
             "10. IMPORTANT: if local_logic is an object, it must contain exactly four keys: requires_state, set_state, success_text, failure_text. Never return a partial local_logic object. If any key is unused, still include it with {} or null.\n"
-            "11. For local_rule options, provide a full local_logic object whenever the result is deterministic on the current object. Use null only when the action is a pure observation or descriptive no-op.\n"
-            "12. immediate_ai options may still use local_logic for deterministic prerequisites or same-object setup before adjudication.\n"
-            "13. Plan a complete 3-6 beat story arc internally. Let scenes shift across time and locations when key decisions resolve, while preserving continuity from prior actions.\n"
-            "14. Each ongoing scene should usually contain one clear next key decision and several deterministic preparation options that let the player set up that decision without another model call.\n"
-            f"15. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
-            f"16. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
-            "17. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
-            "18. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "19. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
-            "20. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
-            "21. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decision.\n"
-            "22. All visible text content must be Simplified Chinese.\n"
+            "11. Every local_rule option MUST include a non-null local_logic object with concrete success_text and failure_text. Even observation, waiting, hesitation, or scouting actions must explain what the player learned, changed, or why repeating it gives no extra benefit.\n"
+            "12. Every option must either produce explicit execution feedback on the current scene or immediately hand control to the next AI-adjudicated branch. Never include filler actions that only say the action happened.\n"
+            "13. immediate_ai options may still use local_logic for deterministic prerequisites or same-object setup before adjudication.\n"
+            "14. Plan a complete 3-6 beat story arc internally. Let scenes shift across time and locations when key decisions resolve, while preserving continuity from prior actions.\n"
+            "15. Avoid single-path scenes. Most ongoing scenes should present at least two distinct forward branches with different risk, evidence, NPC reaction, timing, or location consequences. Only use a single mandatory immediate_ai choice when the scene is close to a terminal outcome.\n"
+            f"16. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
+            f"17. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
+            "18. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
+            "19. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
+            "20. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
+            "21. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
+            "22. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
+            "23. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
@@ -492,12 +493,20 @@ class ReverseDetectiveAIClient:
                     "or when the player manually requests progression because the deterministic setup phase has run out of meaningful actions."
                 ),
                 "balancing_goal": (
-                    "Keep immediate_ai options rare but meaningful. "
-                    "Most options should remain deterministic local_rule setup so the player can act smoothly without waiting on the network."
+                    "Keep immediate_ai as a minority of all visible options, but avoid a single mandatory chokepoint. "
+                    "Most ongoing scenes should still offer two or three distinct branching decision vectors with clearly different consequences."
+                ),
+                "feedback_goal": (
+                    "Every local_rule option must give explicit execution feedback. "
+                    "Observation or wait actions should still state what the player learned, what changed, or why the window did not improve."
                 ),
                 "story_goal": (
                     "Design a coherent multi-scene crime plan with time progression, location changes, and escalating pressure. "
                     "Each returned scene should feel like one beat inside a larger plotted case."
+                ),
+                "branching_goal": (
+                    "Prefer multiple concurrent key decisions across different interactables or NPCs. "
+                    "Do not make every branch converge into the same immediate outcome unless the story is nearly over."
                 ),
             },
             "scene_layout": {
@@ -642,15 +651,30 @@ class ReverseDetectiveAIClient:
                             repaired_options.append(option)
                             continue
                         repaired_option = dict(option)
-                        repaired_option.setdefault("resolution_mode", "local_rule")
-                        if "local_logic" in repaired_option and isinstance(repaired_option["local_logic"], dict):
-                            logic = dict(repaired_option["local_logic"])
-                            repaired_option["local_logic"] = {
-                                "requires_state": dict(logic.get("requires_state", {})),
-                                "set_state": dict(logic.get("set_state", {})),
-                                "success_text": logic.get("success_text"),
-                                "failure_text": logic.get("failure_text"),
-                            }
+                        resolution_mode = repaired_option.get("resolution_mode", "local_rule")
+                        if not isinstance(resolution_mode, str) or not resolution_mode.strip():
+                            resolution_mode = "local_rule"
+                        resolution_mode = resolution_mode.strip()
+                        repaired_option["resolution_mode"] = resolution_mode
+
+                        option_label = repaired_option.get("label")
+                        if not isinstance(option_label, str) or not option_label.strip():
+                            option_label = "当前动作"
+                        option_label = option_label.strip()
+
+                        raw_logic = repaired_option.get("local_logic")
+                        if isinstance(raw_logic, dict):
+                            repaired_option["local_logic"] = self._repair_local_logic_payload(
+                                raw_logic,
+                                option_label=option_label,
+                                resolution_mode=resolution_mode,
+                            )
+                        elif resolution_mode == "local_rule":
+                            repaired_option["local_logic"] = self._repair_local_logic_payload(
+                                {},
+                                option_label=option_label,
+                                resolution_mode=resolution_mode,
+                            )
                         repaired_options.append(repaired_option)
                     repaired_interactable["options"] = repaired_options
 
@@ -659,6 +683,52 @@ class ReverseDetectiveAIClient:
             raw_payload["interactables"] = repaired_interactables
 
         return raw_payload
+
+    def _repair_local_logic_payload(
+        self,
+        logic: dict[str, Any],
+        *,
+        option_label: str,
+        resolution_mode: str,
+    ) -> dict[str, Any]:
+        requires_state = logic.get("requires_state")
+        set_state = logic.get("set_state")
+        return {
+            "requires_state": dict(requires_state) if isinstance(requires_state, dict) else {},
+            "set_state": dict(set_state) if isinstance(set_state, dict) else {},
+            "success_text": self._repair_feedback_text(
+                logic.get("success_text"),
+                option_label=option_label,
+                resolution_mode=resolution_mode,
+                success=True,
+            ),
+            "failure_text": self._repair_feedback_text(
+                logic.get("failure_text"),
+                option_label=option_label,
+                resolution_mode=resolution_mode,
+                success=False,
+            ),
+        }
+
+    def _repair_feedback_text(
+        self,
+        value: Any,
+        *,
+        option_label: str,
+        resolution_mode: str,
+        success: bool,
+    ) -> str:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+
+        if resolution_mode == "immediate_ai":
+            if success:
+                return f"你选择了“{option_label}”，局势会立刻根据这一步发生变化。"
+            return f"当前条件不足，暂时无法触发“{option_label}”。"
+
+        if success:
+            return f"你执行了“{option_label}”，并得到了一条可继续利用的反馈。"
+        return f"当前条件不足，暂时无法执行“{option_label}”。"
 
     def _normalize_scene_layout(self, scene: SceneState) -> SceneState:
         points = self._scene_points(scene)
@@ -830,6 +900,79 @@ class _MockStoryEngine:
                 )
             )
 
+        if latest_action == "stage_alibi":
+            if {"read_witness_route", "inspect_clue"}.issubset(action_ids):
+                return load_scene_payload(self._alibi_scene(request.premise))
+            return load_scene_payload(
+                self._terminal_scene(
+                    request.premise,
+                    game_status="player_lose",
+                    narrative="你仓促布置不在场证明，但证词和时间线根本对不上。",
+                    ending_text="侦探顺着证人的说法倒推出你的行动轨迹，谎言在第一轮盘问里就被拆穿。",
+                )
+            )
+
+        if latest_action == "lure_witness":
+            status = "special_ending" if {"read_witness_route", "prepare_support"}.issubset(action_ids) else "player_lose"
+            narrative = (
+                "你成功把证人的注意力拽离盲区，却也让整层楼的节奏提前失衡。"
+                if status == "special_ending"
+                else "你想诱导证人离开，可动作太急，反而把自己暴露给了走廊里的视线。"
+            )
+            ending_text = (
+                "你换来了一个勉强可用的行动窗口，但整起案件仍留下了可疑的空白。"
+                if status == "special_ending"
+                else "证人记住了你刻意引导的动作，侦探很快把这段异常行为串成了证据链。"
+            )
+            return load_scene_payload(
+                self._terminal_scene(
+                    request.premise,
+                    game_status=status,
+                    narrative=narrative,
+                    ending_text=ending_text,
+                )
+            )
+
+        if latest_action == "pin_blame":
+            if {"plant_register", "inspect_clue", "prepare_support"}.issubset(action_ids):
+                return load_scene_payload(
+                    self._terminal_scene(
+                        request.premise,
+                        game_status="player_win",
+                        narrative="你把时间线、证词和来客记录扣成了一张完整的伪网，怀疑被稳稳引向了错误对象。",
+                        ending_text="侦探在错误的方向上越查越深，而你已经带着完整的不在场证明退回了安全位置。",
+                    )
+                )
+            return load_scene_payload(
+                self._terminal_scene(
+                    request.premise,
+                    game_status="special_ending",
+                    narrative="你成功转移了一部分怀疑，但伪造痕迹仍让案件多出几分说不清的别扭。",
+                    ending_text="案子暂时没有落到你头上，可侦探对那本登记簿始终保留着一点迟迟没放下的怀疑。",
+                )
+            )
+
+        if latest_action == "retreat_clean":
+            status = "special_ending" if {"check_exit", "prepare_support"}.issubset(action_ids) else "player_lose"
+            narrative = (
+                "你收束了整场布局，趁人群和雨声掩护把自己从现场里抹了出去。"
+                if status == "special_ending"
+                else "你想干净撤离，可通道和掩护都没有准备妥当，离场动作显得过于突兀。"
+            )
+            ending_text = (
+                "你没有把怀疑完全转嫁出去，但至少成功把自己藏进了混乱的尾声。"
+                if status == "special_ending"
+                else "侦探注意到你离场的时间点过于巧合，撤离本身成了最醒目的异常。"
+            )
+            return load_scene_payload(
+                self._terminal_scene(
+                    request.premise,
+                    game_status=status,
+                    narrative=narrative,
+                    ending_text=ending_text,
+                )
+            )
+
         scene_payload = scene_to_dict(request.current_scene)
         inside_room = "open_door" in action_ids
         scene_payload["scene"]["background_image"] = (
@@ -886,11 +1029,52 @@ class _MockStoryEngine:
                         self._option(
                             "检查线索",
                             "inspect_clue",
-                            requires={},
-                            set_state={"opened": True, "disabled": True},
+                            requires={"opened": False},
+                            set_state={"opened": True},
                             success_text="你翻开卷宗，确认了关键时间差。",
+                            failure_text="你已经把卷宗里的关键页记住了。",
                         ),
-                        self._option("暂时略过", "ignore_clue"),
+                        self._option(
+                            "暂时略过",
+                            "ignore_clue",
+                            success_text="你决定先不碰卷宗，把注意力留给更紧迫的布置。",
+                            failure_text="你已经做出了暂缓处理卷宗的决定。",
+                        ),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="witness_route",
+                    name="走廊动线",
+                    image="corridor_watch.png",
+                    position=[394, 196],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "观察证人动线",
+                            "read_witness_route",
+                            requires={"opened": False},
+                            set_state={"opened": True},
+                            success_text="你记住了旁观者在走廊上的折返节奏，盲区真正出现的时机终于清晰了。",
+                            failure_text="你已经摸清了这条走廊上的往返规律。",
+                        ),
+                        self._option(
+                            "提前布置不在场证明",
+                            "stage_alibi",
+                            resolution_mode="immediate_ai",
+                            requires={"opened": True, "disabled": False},
+                            set_state={"disabled": True},
+                            success_text="你决定先把自己放进无辜者的位置，再看这套说辞是否经得起追问。",
+                            failure_text="先摸清证人的动线，再决定如何利用这段空档。",
+                        ),
+                        self._option(
+                            "诱导证人离开盲区",
+                            "lure_witness",
+                            resolution_mode="immediate_ai",
+                            requires={"opened": True, "disabled": False},
+                            set_state={"disabled": True},
+                            success_text="你开始引导证人的注意力偏离真正的盲区，准备赌一次节奏失衡。",
+                            failure_text="你还没掌握证人的出入节奏，贸然引导只会让自己暴露。",
+                        ),
                     ],
                 ),
                 self._interactable(
@@ -916,7 +1100,12 @@ class _MockStoryEngine:
                             success_text="你已经把主要手段安置到位。",
                             failure_text="现在还没法正式布置主手段。",
                         ),
-                        self._option("先不处理", "skip_tool"),
+                        self._option(
+                            "先不处理",
+                            "skip_tool",
+                            success_text="你暂时压住了动手冲动，决定把风险留到更合适的时机。",
+                            failure_text="你已经选择继续按兵不动。",
+                        ),
                     ],
                 ),
                 self._interactable(
@@ -941,7 +1130,12 @@ class _MockStoryEngine:
                             success_text="辅助掩护已经准备完成。",
                             failure_text="先打开掩护包再安排掩护。",
                         ),
-                        self._option("维持现状", "skip_support"),
+                        self._option(
+                            "维持现状",
+                            "skip_support",
+                            success_text="你决定暂不动用这组掩护，把它留作更靠后的保险。",
+                            failure_text="这组掩护目前仍被你原样保留。",
+                        ),
                     ],
                 ),
                 self._interactable(
@@ -951,7 +1145,12 @@ class _MockStoryEngine:
                     position=[836, 210],
                     state={"opened": False, "locked": True, "hidden": False, "disabled": False},
                     options=[
-                        self._option("检查门锁", "inspect_lock"),
+                        self._option(
+                            "检查门锁",
+                            "inspect_lock",
+                            success_text="你重新确认了门锁结构和开合声，心里对进门时机更有把握。",
+                            failure_text="你刚刚已经仔细确认过这把门锁了。",
+                        ),
                         self._option(
                             "撬开门锁",
                             "unlock_door",
@@ -977,13 +1176,112 @@ class _MockStoryEngine:
                     position=[1006, 404],
                     state={"opened": False, "locked": False, "hidden": False, "disabled": False},
                     options=[
-                        self._option("继续观察", "wait"),
-                        self._option("执行完美方案", "execute_clean", resolution_mode="immediate_ai"),
-                        self._option("冒险提前动手", "execute_risky", resolution_mode="immediate_ai"),
+                        self._option(
+                            "继续观察",
+                            "wait",
+                            success_text="你继续压低存在感，记录每个人的站位和下一次错身的时间点。",
+                            failure_text="你已经把这一轮站位变化看得足够清楚了。",
+                        ),
+                        self._option(
+                            "执行完美方案",
+                            "execute_clean",
+                            resolution_mode="immediate_ai",
+                            success_text="你决定按原计划进入最稳的一条线，接下来只看局势会不会如你预估般收束。",
+                            failure_text="现在还不是推出完美方案的时机。",
+                        ),
+                        self._option(
+                            "冒险提前动手",
+                            "execute_risky",
+                            resolution_mode="immediate_ai",
+                            success_text="你决定抢在所有准备彻底到位前动手，把结果押在一个更窄的窗口上。",
+                            failure_text="此刻贸然推进只会让风险比你能承受的更高。",
+                        ),
                     ],
                 ),
             ],
             "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+
+    def _alibi_scene(self, premise: StoryPremise) -> dict[str, Any]:
+        return {
+            "scene": {
+                "background_image": "front_gallery.png",
+                "bgm": "tense_loop.mp3",
+                "description": f"{premise.story_title} · 前厅假象",
+            },
+            "npcs": [
+                {
+                    "id": "detective",
+                    "name": premise.detective_name,
+                    "image": "detective.png",
+                    "position": [262, 304],
+                    "patrol": [[222, 296], [338, 320], [296, 360]],
+                },
+                {
+                    "id": "witness",
+                    "name": "旁观者",
+                    "image": "witness.png",
+                    "position": [924, 238],
+                    "patrol": [[882, 228], [980, 248]],
+                },
+            ],
+            "interactables": [
+                self._interactable(
+                    interactable_id="guest_register",
+                    name="来客登记簿",
+                    image="guest_register.png",
+                    position=[438, 392],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "补上一笔到访记录",
+                            "plant_register",
+                            requires={"opened": False},
+                            set_state={"opened": True},
+                            success_text="你在登记簿上补了一笔足以支撑说辞的到访记录。",
+                            failure_text="这本登记簿已经被你动过，继续添改只会增加破绽。",
+                        ),
+                        self._option(
+                            "把怀疑引向他人",
+                            "pin_blame",
+                            resolution_mode="immediate_ai",
+                            requires={"opened": True, "disabled": False},
+                            set_state={"disabled": True},
+                            success_text="你决定借这本登记簿把视线推向另一个更显眼的人。",
+                            failure_text="先把能自圆其说的登记记录补好，再谈得上转移怀疑。",
+                        ),
+                    ],
+                ),
+                self._interactable(
+                    interactable_id="service_passage",
+                    name="侧门通道",
+                    image="service_passage.png",
+                    position=[986, 334],
+                    state={"opened": False, "locked": False, "hidden": False, "disabled": False},
+                    options=[
+                        self._option(
+                            "确认退路",
+                            "check_exit",
+                            requires={"opened": False},
+                            set_state={"opened": True},
+                            success_text="你试过了侧门铰链的声音，确认还能悄无声息地脱离现场。",
+                            failure_text="你已经摸清这条退路的状况了。",
+                        ),
+                        self._option(
+                            "趁混乱撤离",
+                            "retreat_clean",
+                            resolution_mode="immediate_ai",
+                            requires={"opened": True, "disabled": False},
+                            set_state={"disabled": True},
+                            success_text="你决定把整场布局收束成一次干净的离场，把怀疑留在身后。",
+                            failure_text="先确认退路，再决定是否马上撤离。",
+                        ),
+                    ],
+                ),
+            ],
+            "narrative": "不在场证明已经开始成形，前厅里到处都是能被利用也能反噬你的细节。你需要决定，是把怀疑推给别人，还是把自己悄悄从现场抹去。",
             "game_status": "ongoing",
             "ending_text": None,
         }
@@ -1057,12 +1355,23 @@ class _MockStoryEngine:
             or set_state is not None
             or success_text is not None
             or failure_text is not None
+            or resolution_mode == "local_rule"
         ):
             local_logic = {
                 "requires_state": requires or {},
                 "set_state": set_state or {},
-                "success_text": success_text,
-                "failure_text": failure_text,
+                "success_text": success_text
+                or (
+                    f"你执行了“{label}”，并得到了一条可继续利用的反馈。"
+                    if resolution_mode == "local_rule"
+                    else None
+                ),
+                "failure_text": failure_text
+                or (
+                    f"当前条件不足，暂时无法执行“{label}”。"
+                    if resolution_mode == "local_rule"
+                    else None
+                ),
             }
         return {
             "label": label,

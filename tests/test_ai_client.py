@@ -39,6 +39,21 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
     assert len(scene.interactables) >= 3
 
 
+def test_mock_story_exposes_multiple_key_decision_vectors(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    scene = client.generate_initial_scene(build_default_premise())
+    key_choices = [
+        (interactable.id, option.action_id)
+        for interactable in scene.interactables
+        for option in interactable.options
+        if option.resolution_mode == "immediate_ai"
+    ]
+
+    assert len(key_choices) >= 4
+    assert len({interactable_id for interactable_id, _ in key_choices}) >= 2
+
+
 def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
     client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
     premise = build_default_premise()
@@ -114,6 +129,17 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert '"coordinate_system":"pixel"' in response_input[1]["content"]
     assert '"balancing_goal"' in response_input[1]["content"]
     assert '"recent_actions"' in response_input[1]["content"]
+
+
+def test_system_prompt_requires_branching_key_choices_and_feedback(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    prompt = client._build_system_prompt()
+
+    assert "two to four meaningful key decision vectors" in prompt
+    assert "Every local_rule option MUST include a non-null local_logic object" in prompt
+    assert "Never include filler actions that only say the action happened" in prompt
+    assert "Avoid single-path scenes" in prompt
 
 
 def test_live_scene_uses_streaming_responses_api(
@@ -378,7 +404,52 @@ def test_scene_payload_repair_fills_missing_local_logic_keys(tmp_path: Path) -> 
 
     assert scene.interactables[0].options[0].local_logic is not None
     assert scene.interactables[0].options[0].local_logic.set_state == {}
-    assert scene.interactables[0].options[0].local_logic.failure_text is None
+    assert scene.interactables[0].options[0].local_logic.failure_text == "当前条件不足，暂时无法执行“开锁”。"
+
+
+def test_scene_payload_repair_builds_feedback_for_missing_local_rule_logic(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    scene = client._load_scene_payload_with_repair(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "repair",
+            },
+            "npcs": [],
+            "interactables": [
+                {
+                    "id": "notes",
+                    "name": "便签",
+                    "image": "notes.png",
+                    "position": [320, 240],
+                    "state": {
+                        "opened": False,
+                        "locked": False,
+                        "hidden": False,
+                        "disabled": False,
+                    },
+                    "options": [
+                        {
+                            "label": "查看便签",
+                            "action_id": "inspect_notes",
+                            "resolution_mode": "local_rule",
+                        }
+                    ],
+                }
+            ],
+            "narrative": "测试缺失 local_rule 反馈时的修复。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    option = scene.interactables[0].options[0]
+
+    assert option.local_logic is not None
+    assert option.local_logic.success_text == "你执行了“查看便签”，并得到了一条可继续利用的反馈。"
+    assert option.local_logic.failure_text == "当前条件不足，暂时无法执行“查看便签”。"
 
 
 def test_live_timeout_expands_stream_read_deadline_for_normal_requests(tmp_path: Path) -> None:

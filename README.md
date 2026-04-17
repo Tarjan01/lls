@@ -85,8 +85,10 @@ AI 每次返回的 JSON 需严格遵循以下结构：
 ### 关键约束
 - `interactables[].state` 必须存在，且必须包含 `opened` / `locked` / `hidden` / `disabled` 四个布尔值。
 - `options[].resolution_mode` 只能是 `local_rule` 或 `immediate_ai`。
-- `options[].local_logic` 如果是对象，必须完整包含 `requires_state` / `set_state` / `success_text` / `failure_text` 四个字段，不能只返回部分字段。
+- `local_rule` 选项必须返回非空的 `local_logic` 对象，且必须完整包含 `requires_state` / `set_state` / `success_text` / `failure_text` 四个字段，不能只返回部分字段。
+- 所有 `local_rule` 选项都必须给出明确执行反馈；即使是观察、等待、试探这类动作，也要说明玩家获得了什么信息，或为什么继续重复不会带来额外收益。
 - `local_rule` 用于本地可确定处理的准备动作；`immediate_ai` 用于会显著改变风险、时间、地点、证据或剧情走向的关键决策点。
+- 进行中的场景不应只剩一个单一路径关键决策。通常应提供多个关键决策分支，导向不同风险、时间推进、人物反应或结果。
 - AI 应按完整剧情脉络生成场景推进，允许在关键决策后切换时间、地点和场景布局。
 ## 关键内容
 游戏制作方只提供基础的人物设定和故事背景。场景图片、可互动物品、选项内容、故事逻辑与结局**全部由大模型实时生成**。

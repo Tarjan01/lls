@@ -64,7 +64,13 @@ def _build_local_logic_scene():
                         {
                             "label": "继续观察",
                             "action_id": "wait",
-                            "local_logic": None
+                            "resolution_mode": "local_rule",
+                            "local_logic": {
+                                "requires_state": {},
+                                "set_state": {},
+                                "success_text": "你继续观察挂钟与走廊动静，确认下一次空档还没到来。",
+                                "failure_text": "你再次观察这口挂钟，也没有更多变化。",
+                            },
                         }
                     ],
                 },
