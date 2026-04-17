@@ -20,6 +20,10 @@ def _write_asset_image(path: Path, color: tuple[int, int, int], size: tuple[int,
     pygame.image.save(surface, str(path))
 
 
+def _opaque_pixel_count(surface: pygame.Surface, y: int) -> int:
+    return sum(1 for x in range(surface.get_width()) if surface.get_at((x, y))[3] > 0)
+
+
 def test_renderer_draws_cached_assets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
@@ -276,6 +280,7 @@ def test_renderer_preserves_character_aspect_ratio_when_scaling(
         surface = renderer._load_player_surface("male", (48, 48), "player")
         assert surface is not None
         assert surface.get_at((2, 24))[3] == 0
+        assert _opaque_pixel_count(surface, 24) >= 14
         center_pixel = surface.get_at((24, 24))[:3]
         assert center_pixel[2] > center_pixel[0]
         assert center_pixel[2] > center_pixel[1]
@@ -302,6 +307,7 @@ def test_menu_renderer_preserves_character_aspect_ratio_when_scaling(
         surface = renderer._load_menu_portrait_surface("female", (48, 48), "player")
         assert surface is not None
         assert surface.get_at((2, 24))[3] == 0
+        assert _opaque_pixel_count(surface, 24) >= 14
         center_pixel = surface.get_at((24, 24))[:3]
         assert center_pixel[0] > center_pixel[1]
         assert center_pixel[0] > center_pixel[2]

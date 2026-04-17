@@ -16,6 +16,7 @@ from reverse_detective.utils.text import fit_text, preview_wrapped_text, wrap_te
 
 
 Color = tuple[int, int, int]
+CHARACTER_RENDER_SCALE = 1.2
 
 
 @dataclass(frozen=True, slots=True)
@@ -1256,6 +1257,7 @@ class Renderer(TooltipMixin):
                         loaded,
                         size,
                         align_bottom=asset_kind in {"npc", "character"},
+                        scale_multiplier=CHARACTER_RENDER_SCALE if asset_kind in {"npc", "character"} else 1.0,
                     )
         except Exception:
             return None
@@ -1494,13 +1496,14 @@ def _fit_surface_to_box(
     size: tuple[int, int],
     *,
     align_bottom: bool = False,
+    scale_multiplier: float = 1.0,
 ) -> pygame.Surface:
     target_width, target_height = size
     source_width, source_height = surface.get_size()
     if target_width <= 0 or target_height <= 0 or source_width <= 0 or source_height <= 0:
         return surface
 
-    ratio = min(target_width / source_width, target_height / source_height)
+    ratio = min(target_width / source_width, target_height / source_height) * max(scale_multiplier, 0.01)
     scaled_size = (
         max(1, int(round(source_width * ratio))),
         max(1, int(round(source_height * ratio))),
@@ -2304,6 +2307,7 @@ class MenuRenderer(TooltipMixin):
                         loaded,
                         size,
                         align_bottom=asset_kind in {"npc", "character"},
+                        scale_multiplier=CHARACTER_RENDER_SCALE if asset_kind in {"npc", "character"} else 1.0,
                     )
         except Exception:
             return None
