@@ -121,3 +121,29 @@ def test_game_app_can_browse_text_history_while_loading(
         assert app._session.selected_text_history.title == "下一条"
     finally:
         pygame.quit()
+
+
+def test_game_app_routes_arrow_keys_to_selected_text_panel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    scrolled: list[int] = []
+    app._mode = "game"
+    app._game_renderer._selected_text_content = "已选中的长文本"
+
+    def fake_scroll(delta: int) -> bool:
+        scrolled.append(delta)
+        return True
+
+    app._game_renderer.scroll_selected_text = fake_scroll  # type: ignore[method-assign]
+
+    try:
+        app._handle_keydown(pygame.K_DOWN)
+        app._handle_keydown(pygame.K_UP)
+
+        assert scrolled == [1, -1]
+    finally:
+        pygame.quit()

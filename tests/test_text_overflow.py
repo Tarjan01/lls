@@ -41,7 +41,7 @@ def test_preview_wrapped_text_reports_block_truncation() -> None:
         pygame.quit()
 
 
-def test_menu_renderer_registers_hover_tooltip_for_truncated_option(
+def test_menu_renderer_registers_click_selectable_text_for_truncated_option(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
@@ -52,7 +52,7 @@ def test_menu_renderer_registers_hover_tooltip_for_truncated_option(
     screen = pygame.display.get_surface()
     assert screen is not None
 
-    long_option = "开始游戏并进入一个名字特别特别长的测试菜单项，用来验证悬停时显示完整文本"
+    long_option = "开始游戏并进入一个名字特别特别长的测试菜单项，用来验证点选后显示完整文本"
     background = SimpleNamespace(
         game_title="反向侦探案件模拟台终端界面标题非常长非常长",
         game_subtitle="这是一个用于验证标题区域会自动省略并保留完整提示文本的副标题",
@@ -73,7 +73,7 @@ def test_menu_renderer_registers_hover_tooltip_for_truncated_option(
         pygame.quit()
 
 
-def test_tooltip_overlay_only_renders_when_hovered(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_selected_text_panel_only_renders_after_click(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
 
@@ -86,6 +86,7 @@ def test_tooltip_overlay_only_renders_when_hovered(monkeypatch: pytest.MonkeyPat
     target = TooltipTarget(
         rect=pygame.Rect(120, 120, 120, 24),
         text="这是一段只应在鼠标悬停时显示的完整提示文本。",
+        key="sample",
         selected=True,
         preferred_width=260,
     )
@@ -93,19 +94,52 @@ def test_tooltip_overlay_only_renders_when_hovered(monkeypatch: pytest.MonkeyPat
     try:
         screen.fill((8, 12, 18))
         renderer._tooltip_targets = [target]
-        renderer._mouse_pos = (12, 12)
+        renderer.clear_selected_text()
         before_idle = pygame.image.tobytes(screen, "RGBA")
         renderer._draw_tooltip_overlay()
         after_idle = pygame.image.tobytes(screen, "RGBA")
 
         screen.fill((8, 12, 18))
         renderer._tooltip_targets = [target]
-        renderer._mouse_pos = (126, 126)
+        renderer.handle_text_selection_click((126, 126))
         before_hover = pygame.image.tobytes(screen, "RGBA")
         renderer._draw_tooltip_overlay()
         after_hover = pygame.image.tobytes(screen, "RGBA")
 
         assert after_idle == before_idle
         assert after_hover != before_hover
+        assert renderer.has_selected_text() is True
+    finally:
+        pygame.quit()
+
+
+def test_selected_text_panel_scrolls_after_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((640, 360))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    renderer = MenuRenderer(screen, 640, 360)
+    target = TooltipTarget(
+        rect=pygame.Rect(80, 80, 120, 24),
+        text="滚动测试文本。" * 120,
+        key="scroll-sample",
+        preferred_width=320,
+    )
+
+    try:
+        renderer._tooltip_targets = [target]
+        assert renderer.handle_text_selection_click((86, 86)) is True
+
+        screen.fill((10, 14, 18))
+        renderer._draw_tooltip_overlay()
+        initial_scroll = renderer._selected_text_scroll
+        assert renderer._selected_text_max_scroll > 0
+
+        assert renderer.scroll_selected_text(4) is True
+        assert renderer._selected_text_scroll > initial_scroll
     finally:
         pygame.quit()

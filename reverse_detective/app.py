@@ -191,6 +191,10 @@ class GameApp:
                 self._running = False
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event.key, getattr(event, "unicode", ""))
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                self._handle_mousebuttondown(event.button, event.pos)
+            elif event.type == pygame.MOUSEWHEEL:
+                self._handle_mousewheel(event.y)
 
     def _handle_keydown(self, key: int, text: str = "") -> None:
         if self._editing_field is not None:
@@ -200,6 +204,9 @@ class GameApp:
         if self._detail_modal is not None:
             if key in (pygame.K_ESCAPE, pygame.K_RETURN, pygame.K_SPACE, pygame.K_BACKSPACE):
                 self._detail_modal = None
+            return
+
+        if self._handle_selected_text_keydown(key):
             return
 
         if self._mode == "main_menu":
@@ -222,6 +229,44 @@ class GameApp:
             return
 
         self._handle_game_keydown(key)
+
+    def _handle_mousebuttondown(self, button: int, position: tuple[int, int]) -> None:
+        if self._editing_field is not None or self._detail_modal is not None:
+            return
+
+        if button == 1:
+            renderer = self._active_text_renderer()
+            if renderer is not None and renderer.handle_text_selection_click(position):
+                return
+
+        if button == 4:
+            self._handle_mousewheel(1)
+        elif button == 5:
+            self._handle_mousewheel(-1)
+
+    def _handle_mousewheel(self, delta: int) -> None:
+        renderer = self._active_text_renderer()
+        if renderer is None:
+            return
+        renderer.scroll_selected_text(-delta * 3)
+
+    def _handle_selected_text_keydown(self, key: int) -> bool:
+        renderer = self._active_text_renderer()
+        if renderer is None or not renderer.has_selected_text():
+            return False
+
+        if key == pygame.K_ESCAPE:
+            renderer.clear_selected_text()
+            return True
+        if key == pygame.K_UP:
+            return renderer.scroll_selected_text(-1)
+        if key == pygame.K_DOWN:
+            return renderer.scroll_selected_text(1)
+        if key == pygame.K_PAGEUP:
+            return renderer.scroll_selected_text(-6)
+        if key == pygame.K_PAGEDOWN:
+            return renderer.scroll_selected_text(6)
+        return False
 
     def _handle_main_menu_keydown(self, key: int) -> None:
         if key == pygame.K_UP:
@@ -633,17 +678,20 @@ class GameApp:
         self._mode = "story_browser"
         self._story_focus = "story"
         self._detail_modal = None
+        self._clear_selected_text_readers()
 
     def _enter_settings(self) -> None:
         self._mode = "settings"
         self._settings_index = 0
         self._detail_modal = None
+        self._clear_selected_text_readers()
         self._reset_settings_draft()
 
     def _start_selected_story(self) -> None:
         self._detail_modal = None
         self._editing_field = None
         self._input_buffer = ""
+        self._clear_selected_text_readers()
         self._premise = build_story_premise(self.current_story, self.current_role.id)
         self._session = GameSessionState.create(self._premise)
         self._elapsed_seconds = 0.0
@@ -667,6 +715,7 @@ class GameApp:
         self._detail_modal = None
         self._editing_field = None
         self._input_buffer = ""
+        self._clear_selected_text_readers()
         if status_text is not None:
             self._status_text = status_text
 
@@ -689,6 +738,7 @@ class GameApp:
         self._schedule_initial_scene_prefetch()
 
     def _open_detail_modal(self) -> None:
+        self._clear_selected_text_readers()
         if self._story_focus == "story":
             story = self.current_story
             self._detail_modal = DetailModal(
@@ -852,6 +902,19 @@ class GameApp:
             )
             self._status_text = f"AI 配置不可用，已临时回退到本地 Mock：{exc}"
             return ReverseDetectiveAIClient(fallback)
+
+    def _active_text_renderer(self) -> Renderer | MenuRenderer | None:
+        if self._editing_field is not None or self._detail_modal is not None:
+            return None
+        if self._mode == "game":
+            return self._game_renderer
+        if self._mode in {"main_menu", "story_browser", "settings"}:
+            return self._menu_renderer
+        return None
+
+    def _clear_selected_text_readers(self) -> None:
+        self._game_renderer.clear_selected_text()
+        self._menu_renderer.clear_selected_text()
 
     def _schedule_initial_scene_prefetch(self, *, force: bool = False) -> None:
         if not self._can_background_prefetch_initial_scene():

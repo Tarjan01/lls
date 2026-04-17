@@ -30,12 +30,13 @@ class PlaceholderStyle:
 class TooltipTarget:
     rect: pygame.Rect
     text: str
+    key: str
     selected: bool = False
     preferred_width: int = 360
 
 
 class TooltipMixin:
-    """Shared tooltip behavior for menu and in-game renderers."""
+    """Shared selected-text viewer behavior for menu and in-game renderers."""
 
     _surface: pygame.Surface
     _width: int
@@ -43,10 +44,27 @@ class TooltipMixin:
     _small_font: Any
     _tooltip_targets: list[TooltipTarget]
     _mouse_pos: tuple[int, int]
+    _selected_text_key: str | None
+    _selected_text_content: str | None
+    _selected_text_preferred_width: int
+    _selected_text_scroll: int
+    _selected_text_max_scroll: int
+    _selected_text_panel_rect: pygame.Rect | None
+
+    def _init_tooltip_state(self) -> None:
+        self._tooltip_targets = []
+        self._mouse_pos = (0, 0)
+        self._selected_text_key = None
+        self._selected_text_content = None
+        self._selected_text_preferred_width = 360
+        self._selected_text_scroll = 0
+        self._selected_text_max_scroll = 0
+        self._selected_text_panel_rect = None
 
     def _begin_tooltip_frame(self) -> None:
         self._tooltip_targets = []
         self._mouse_pos = pygame.mouse.get_pos()
+        self._selected_text_panel_rect = None
 
     def _register_tooltip(
         self,
@@ -59,44 +77,136 @@ class TooltipMixin:
         cleaned = text.strip()
         if not cleaned:
             return
+        key = self._tooltip_key(rect, cleaned)
         self._tooltip_targets.append(
-            TooltipTarget(rect.copy(), cleaned, selected=selected, preferred_width=preferred_width)
+            TooltipTarget(
+                rect.copy(),
+                cleaned,
+                key=key,
+                selected=selected,
+                preferred_width=preferred_width,
+            )
         )
+        if self._selected_text_key == key:
+            self._selected_text_preferred_width = preferred_width
 
-    def _draw_tooltip_overlay(self) -> None:
+    def has_selected_text(self) -> bool:
+        return bool(self._selected_text_content)
+
+    def clear_selected_text(self) -> None:
+        self._selected_text_key = None
+        self._selected_text_content = None
+        self._selected_text_scroll = 0
+        self._selected_text_max_scroll = 0
+        self._selected_text_panel_rect = None
+
+    def handle_text_selection_click(self, position: tuple[int, int]) -> bool:
         target = next(
-            (candidate for candidate in reversed(self._tooltip_targets) if candidate.rect.collidepoint(self._mouse_pos)),
+            (candidate for candidate in reversed(self._tooltip_targets) if candidate.rect.collidepoint(position)),
             None,
         )
-        if target is None:
+        if target is not None:
+            self._selected_text_key = target.key
+            self._selected_text_content = target.text
+            self._selected_text_preferred_width = target.preferred_width
+            self._selected_text_scroll = 0
+            self._selected_text_max_scroll = 0
+            return True
+
+        if self._selected_text_panel_rect is not None and self._selected_text_panel_rect.collidepoint(position):
+            return True
+
+        if self.has_selected_text():
+            self.clear_selected_text()
+            return True
+
+        return False
+
+    def scroll_selected_text(self, delta_lines: int) -> bool:
+        if not self.has_selected_text():
+            return False
+        self._selected_text_scroll = min(
+            max(self._selected_text_scroll + delta_lines, 0),
+            self._selected_text_max_scroll,
+        )
+        return True
+
+    def _draw_tooltip_overlay(self) -> None:
+        if not self.has_selected_text() or self._selected_text_content is None:
             return
 
-        tooltip_width = min(max(target.preferred_width, 220), self._width - 32)
-        lines = wrap_text(target.text, self._small_font, tooltip_width - 24)
-        line_height = self._small_font.get_height() + 4
-        tooltip_height = 20 + len(lines) * line_height
+        selected_target = next(
+            (candidate for candidate in self._tooltip_targets if candidate.key == self._selected_text_key),
+            None,
+        )
+        if selected_target is not None:
+            highlight_rect = selected_target.rect.inflate(10, 10)
+            pygame.draw.rect(self._surface, (244, 220, 171), highlight_rect, width=2, border_radius=10)
 
-        anchor_x = self._mouse_pos[0] + 14
-        anchor_y = self._mouse_pos[1] + 18
-        tooltip_rect = pygame.Rect(anchor_x, anchor_y, tooltip_width, tooltip_height)
-        if tooltip_rect.right > self._width - 12:
-            tooltip_rect.right = self._width - 12
-        if tooltip_rect.bottom > self._height - 12:
-            tooltip_rect.bottom = self._height - 12
-        if tooltip_rect.left < 12:
-            tooltip_rect.left = 12
-        if tooltip_rect.top < 12:
-            tooltip_rect.top = 12
+        panel_width = min(
+            max(self._selected_text_preferred_width + 48, 360),
+            max(320, self._width - 72),
+        )
+        panel_height = min(max(236, self._height // 3), self._height - 116)
+        panel_rect = pygame.Rect(
+            self._width - panel_width - 28,
+            max(92, self._height - panel_height - 74),
+            panel_width,
+            panel_height,
+        )
+        self._selected_text_panel_rect = panel_rect
 
-        overlay = pygame.Surface((tooltip_rect.width, tooltip_rect.height), pygame.SRCALPHA)
-        overlay.fill((12, 16, 22, 232))
-        self._surface.blit(overlay, tooltip_rect)
-        pygame.draw.rect(self._surface, (242, 209, 142), tooltip_rect, width=2, border_radius=12)
-        y = tooltip_rect.y + 10
-        for line in lines:
+        overlay = pygame.Surface((panel_rect.width, panel_rect.height), pygame.SRCALPHA)
+        overlay.fill((12, 16, 22, 236))
+        self._surface.blit(overlay, panel_rect)
+        pygame.draw.rect(self._surface, (242, 209, 142), panel_rect, width=2, border_radius=18)
+
+        self._blit_clamped_line(
+            self._small_font,
+            "全文查看",
+            (panel_rect.x + 18, panel_rect.y + 14),
+            (244, 227, 191),
+            panel_rect.width - 36,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            "鼠标点选文字后可在此阅读，滚轮或 ↑↓ 键滚动，点击空白处关闭。",
+            (panel_rect.x + 18, panel_rect.y + 38),
+            (208, 214, 224),
+            panel_rect.width - 36,
+        )
+
+        body_rect = pygame.Rect(panel_rect.x + 18, panel_rect.y + 68, panel_rect.width - 42, panel_rect.height - 88)
+        line_height = self._small_font.get_height() + 6
+        wrapped_lines = wrap_text(self._selected_text_content, self._small_font, body_rect.width - 8)
+        visible_lines = max(1, body_rect.height // max(line_height, 1))
+        self._selected_text_max_scroll = max(0, len(wrapped_lines) - visible_lines)
+        self._selected_text_scroll = min(max(self._selected_text_scroll, 0), self._selected_text_max_scroll)
+
+        start_line = self._selected_text_scroll
+        end_line = min(len(wrapped_lines), start_line + visible_lines)
+        y = body_rect.y
+        for line in wrapped_lines[start_line:end_line]:
             rendered = self._small_font.render(line, True, (244, 241, 233))
-            self._surface.blit(rendered, (tooltip_rect.x + 12, y))
+            self._surface.blit(rendered, (body_rect.x, y))
             y += line_height
+
+        if self._selected_text_max_scroll > 0:
+            track_rect = pygame.Rect(panel_rect.right - 16, body_rect.y, 6, body_rect.height)
+            pygame.draw.rect(self._surface, (56, 66, 82), track_rect, border_radius=3)
+            thumb_height = max(26, int(track_rect.height * (visible_lines / max(len(wrapped_lines), 1))))
+            travel = max(0, track_rect.height - thumb_height)
+            ratio = self._selected_text_scroll / max(self._selected_text_max_scroll, 1)
+            thumb_rect = pygame.Rect(
+                track_rect.x,
+                track_rect.y + int(travel * ratio),
+                track_rect.width,
+                thumb_height,
+            )
+            pygame.draw.rect(self._surface, (233, 198, 132), thumb_rect, border_radius=3)
+
+    def _tooltip_key(self, rect: pygame.Rect, text: str) -> str:
+        return f"{rect.x}:{rect.y}:{rect.width}:{rect.height}:{text}"
 
     def _blit_clamped_line(
         self,
@@ -240,8 +350,7 @@ class Renderer(TooltipMixin):
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28)
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 16)
-        self._tooltip_targets: list[TooltipTarget] = []
-        self._mouse_pos = (0, 0)
+        self._init_tooltip_state()
 
     def draw(
         self,
@@ -954,8 +1063,7 @@ class MenuRenderer(TooltipMixin):
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28, bold=True)
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 15)
-        self._tooltip_targets: list[TooltipTarget] = []
-        self._mouse_pos = (0, 0)
+        self._init_tooltip_state()
 
     def draw_main_menu(
         self,
