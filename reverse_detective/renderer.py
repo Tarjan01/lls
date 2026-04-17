@@ -1299,6 +1299,10 @@ class Renderer(TooltipMixin):
         )
 
     def _preferred_character_candidates(self, *hint_texts: str) -> tuple[tuple[str, str], ...]:
+        specific_candidates = self._specific_character_candidates(*hint_texts)
+        if specific_candidates:
+            return specific_candidates
+
         normalized = " ".join(fragment.strip().lower() for fragment in hint_texts if fragment).strip()
         if not normalized:
             return ()
@@ -1373,6 +1377,38 @@ class Renderer(TooltipMixin):
             return self._character_asset_sequence("6.png", "3.png", "2.png", "5.png")
 
         return self._character_asset_sequence("6.png", "3.png", "4.png", "5.png")
+
+    def _specific_character_candidates(self, *hint_texts: str) -> tuple[tuple[str, str], ...]:
+        normalized_hints = {fragment.strip().lower() for fragment in hint_texts if fragment and fragment.strip()}
+        if not normalized_hints:
+            return ()
+
+        named_sequences: tuple[tuple[set[str], tuple[tuple[str, str], ...]], ...] = (
+            (
+                {"old_chen", "老陈", "victim", "赵万山", "傅承泽"},
+                self._character_asset_sequence("3.png", "6.png", "2.png", "5.png"),
+            ),
+            (
+                {"detective", "周启", "沈策", "witness", "旁观者"},
+                self._character_asset_sequence("6.png", "3.png", "2.png", "5.png"),
+            ),
+            (
+                {"su_man", "苏曼", "teacher_lin", "林老师", "chief_caretaker", "周姨"},
+                self._character_asset_sequence("4.png", "1.png", "5.png", "6.png"),
+            ),
+            (
+                {"auction_rival", "阮知夏", "restoration_teacher", "许岚"},
+                self._character_asset_sequence("4.png", "1.png", "5.png", "6.png"),
+            ),
+            (
+                {"doctor_zhang", "张博士", "private_doctor", "何医生"},
+                self._character_asset_sequence("5.png", "6.png", "3.png", "2.png"),
+            ),
+        )
+        for aliases, sequence in named_sequences:
+            if normalized_hints & aliases:
+                return sequence
+        return ()
 
     def _character_asset_sequence(self, *filenames: str) -> tuple[tuple[str, str], ...]:
         unique: list[tuple[str, str]] = []

@@ -351,6 +351,55 @@ def test_renderer_prefers_character_assets_for_npcs(
         pygame.quit()
 
 
+def test_renderer_stabilizes_story_character_mappings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    _write_asset_image(tmp_path / "character" / "3.png", (188, 62, 42), (64, 64))
+    _write_asset_image(tmp_path / "character" / "4.png", (226, 74, 174), (64, 64))
+    _write_asset_image(tmp_path / "character" / "5.png", (232, 232, 232), (64, 64))
+    _write_asset_image(tmp_path / "character" / "6.png", (44, 120, 220), (64, 64))
+    _write_asset_image(tmp_path / "npcs" / "npc.png", (18, 180, 88), (64, 64))
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+    old_man = NPC(id="old_chen", name="老陈", image="npc.png", position=(100, 100), patrol=None)
+    security = NPC(id="detective", name="周启", image="npc.png", position=(100, 100), patrol=None)
+    woman = NPC(id="auction_rival", name="阮知夏", image="npc.png", position=(100, 100), patrol=None)
+    doctor = NPC(id="private_doctor", name="何医生", image="npc.png", position=(100, 100), patrol=None)
+
+    try:
+        old_surface = renderer._load_npc_surface(old_man, (48, 48))
+        security_surface = renderer._load_npc_surface(security, (48, 48))
+        woman_surface = renderer._load_npc_surface(woman, (48, 48))
+        doctor_surface = renderer._load_npc_surface(doctor, (48, 48))
+
+        assert old_surface is not None
+        assert security_surface is not None
+        assert woman_surface is not None
+        assert doctor_surface is not None
+
+        old_pixel = old_surface.get_at((12, 12))[:3]
+        security_pixel = security_surface.get_at((12, 12))[:3]
+        woman_pixel = woman_surface.get_at((12, 12))[:3]
+        doctor_pixel = doctor_surface.get_at((12, 12))[:3]
+
+        assert old_pixel[0] > old_pixel[2]
+        assert security_pixel[2] > security_pixel[0]
+        assert woman_pixel[0] > 180
+        assert woman_pixel[2] > 120
+        assert min(doctor_pixel) > 180
+    finally:
+        pygame.quit()
+
+
 def test_renderer_places_freeform_action_trigger_left_of_sidebar(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
