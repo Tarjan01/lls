@@ -5,3 +5,5 @@ __pycache__/
 .mypy_cache/
 .runtime_assets/
 .tmp_assets/
+.tmp_kenney_*.html
+.tmp_*preview.png

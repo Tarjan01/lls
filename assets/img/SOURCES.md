@@ -1,21 +1,24 @@
 # Local Image Sources
 
-All bundled images in `assets/img` come from Kenney free asset packs that were downloaded from the public Kenney website and copied into this demo as a local fallback library.
+All bundled images in `assets/img` come from Kenney free asset packs downloaded from the public Kenney website and curated into a local fallback library for this demo.
 
-Primary source packs used in this repository:
+Current primary packs:
 
+- `Platformer Art Deluxe`
+  - Source: `https://kenney.nl/assets/platformer-art-deluxe`
+  - Used for doors, windows, clocks, props, and modular room pieces that support the demo's side/front-view presentation.
+- `Platformer Characters`
+  - Source: `https://kenney.nl/assets/platformer-characters`
+  - Used as supporting reference material while curating readable 2.5D-friendly character proportions.
+- `Toon Characters`
+  - Source: `https://kenney.nl/assets/toon-characters-1`
+  - Used for upright NPC sprites such as `detective.png`, `victim.png`, `witness.png`, `security_guard.png`.
 - `Background Elements`
   - Source: `https://kenney.nl/assets/background-elements`
-  - Files reused for atmospheric background plates such as `villa_exterior.png`, `forest_edge.png`, `mountain_road.png`
-- `Top Down Shooter`
-  - Source: `https://kenney.nl/assets/top-down-shooter`
-  - Files reused for character sprites and prop sprites such as `security_soldier.png`, `tool_bag.png`, `control_console.png`
-- `Roguelike RPG Pack`
-  - Source: `https://kenney.nl/assets/roguelike-rpg-pack`
-  - Files reused for interior and outdoor sample backgrounds such as `mansion_study_room.png`, `estate_garden.png`
+  - Used for environmental layers and exterior set dressing such as trees, houses, hills, and atmospheric background plates.
 
-Notes:
+Style note:
 
-- These assets are used as a local image library to replace the previous runtime AI image generation path.
-- `assets/img/catalog.json` defines the fuzzy-match aliases and tags used by the game when it tries to find the closest local image for a background, NPC, or interactable.
-- The raw downloaded archives remain under `.tmp_assets/` for local curation only and are ignored by Git.
+- The active demo library now prefers 2.5D, stage-like side/front-view assets instead of top-down sprites.
+- `assets/img/catalog.json` is tuned to bias asset resolution toward these side/front-view files when the AI returns approximate names.
+- Raw downloaded packs remain under `.tmp_assets/` for local curation only and are not part of the runtime package.

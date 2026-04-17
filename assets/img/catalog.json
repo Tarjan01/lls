@@ -1,206 +1,242 @@
 {
   "background": [
     {
+      "id": "rainy_villa_hall",
+      "path": "backgrounds/rainy_villa_hall.png",
+      "aliases": ["rainy_hall", "villa_hall", "manor_hall", "prep_hall", "staging_hall"],
+      "tags": ["indoor", "villa", "hall", "sideview", "frontview", "stage", "2_5d"]
+    },
+    {
+      "id": "rainy_villa_ending",
+      "path": "backgrounds/rainy_villa_ending.png",
+      "aliases": ["ending_hall", "finale_hall", "reveal_hall", "ending_room"],
+      "tags": ["indoor", "villa", "ending", "sideview", "frontview", "stage", "2_5d"]
+    },
+    {
       "id": "security_control_room",
       "path": "backgrounds/security_control_room.png",
-      "aliases": ["rainy_villa_hall", "control_room", "security_room", "night_hall", "hallway"],
-      "tags": ["indoor", "mansion", "villa", "surveillance", "night", "investigation"]
+      "aliases": ["control_room", "security_room", "monitor_room", "surveillance_room"],
+      "tags": ["indoor", "control", "security", "surveillance", "sideview", "stage", "2_5d"]
     },
     {
       "id": "gallery_surveillance_room",
       "path": "backgrounds/gallery_surveillance_room.png",
-      "aliases": ["gallery_control_room", "gallery_security_room", "surveillance_room"],
-      "tags": ["gallery", "museum", "control", "monitoring", "night"]
+      "aliases": ["gallery_control_room", "gallery_security_room", "museum_monitor_room"],
+      "tags": ["gallery", "museum", "control", "surveillance", "sideview", "stage", "2_5d"]
     },
     {
       "id": "mansion_study_room",
       "path": "backgrounds/mansion_study_room.png",
-      "aliases": ["study_room", "villa_study", "library_room", "manor_study", "rainy_villa_ending"],
-      "tags": ["indoor", "study", "library", "office", "mansion", "room"]
+      "aliases": ["study_room", "villa_study", "library_room", "manor_study", "office_room"],
+      "tags": ["indoor", "study", "library", "office", "mansion", "sideview", "stage", "2_5d"]
     },
     {
       "id": "gallery_inner_hall",
       "path": "backgrounds/gallery_inner_hall.png",
       "aliases": ["gallery_hall", "art_gallery", "exhibition_hall", "glass_gallery", "mirror_gallery"],
-      "tags": ["gallery", "museum", "interior", "hall", "exhibit", "glass"]
+      "tags": ["gallery", "museum", "hall", "interior", "sideview", "frontview", "stage", "2_5d"]
+    },
+    {
+      "id": "front_gallery",
+      "path": "backgrounds/front_gallery.png",
+      "aliases": ["gallery_lobby", "reception_gallery", "front_hall", "entry_gallery"],
+      "tags": ["gallery", "lobby", "reception", "frontview", "stage", "2_5d"]
     },
     {
       "id": "estate_garden",
       "path": "backgrounds/estate_garden.png",
-      "aliases": ["estate_ground", "garden", "courtyard", "outdoor"],
-      "tags": ["garden", "yard", "outdoor", "estate", "villa", "grounds"]
+      "aliases": ["estate_ground", "garden", "courtyard", "outdoor", "villa_garden"],
+      "tags": ["garden", "yard", "estate", "outdoor", "sideview", "stage", "2_5d"]
     },
     {
       "id": "villa_exterior",
       "path": "backgrounds/villa_exterior.png",
-      "aliases": ["rainy_villa_exterior", "manor_exterior", "castle_exterior"],
-      "tags": ["exterior", "villa", "manor", "castle", "night", "remote"]
+      "aliases": ["rainy_villa_exterior", "manor_exterior", "house_front", "estate_front"],
+      "tags": ["exterior", "villa", "manor", "outdoor", "frontview", "stage", "2_5d"]
     },
     {
       "id": "forest_edge",
       "path": "backgrounds/forest_edge.png",
-      "aliases": ["forest", "woods", "mountain_forest"],
-      "tags": ["forest", "trees", "outdoor", "remote", "path"]
+      "aliases": ["forest", "woods", "mountain_forest", "tree_line"],
+      "tags": ["forest", "trees", "outdoor", "path", "sideview", "stage", "2_5d"]
     },
     {
       "id": "mountain_road",
       "path": "backgrounds/mountain_road.png",
-      "aliases": ["cliff_path", "remote_road", "mountain_path"],
-      "tags": ["road", "mountain", "remote", "outdoor", "escape"]
+      "aliases": ["cliff_path", "remote_road", "mountain_path", "escape_road"],
+      "tags": ["road", "mountain", "outdoor", "escape", "sideview", "stage", "2_5d"]
     }
   ],
   "npc": [
     {
-      "id": "hitman_suit",
-      "path": "npcs/hitman_suit.png",
-      "aliases": ["detective", "detective_npc", "suspect_man", "killer", "professional"],
-      "tags": ["male", "suit", "formal", "investigator"]
+      "id": "detective",
+      "path": "npcs/detective.png",
+      "aliases": ["detective_npc", "investigator", "killer", "professional", "suit_man"],
+      "tags": ["male", "detective", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "man_blue",
-      "path": "npcs/man_blue.png",
-      "aliases": ["victim", "wealthy_man", "ceo", "curator", "owner", "victim_npc"],
-      "tags": ["male", "rich", "target", "businessman"]
+      "id": "victim",
+      "path": "npcs/victim.png",
+      "aliases": ["victim_npc", "wealthy_man", "ceo", "curator", "owner", "target"],
+      "tags": ["male", "victim", "target", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "man_brown",
-      "path": "npcs/man_brown.png",
-      "aliases": ["butler", "witness", "caretaker", "steward"],
-      "tags": ["male", "staff", "elder", "household"]
+      "id": "witness",
+      "path": "npcs/witness.png",
+      "aliases": ["witness_npc", "butler", "caretaker", "steward", "observer"],
+      "tags": ["male", "witness", "staff", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "man_old",
-      "path": "npcs/man_old.png",
-      "aliases": ["doctor", "physician", "old_man", "private_doctor"],
-      "tags": ["male", "doctor", "medical", "elder"]
+      "id": "private_doctor",
+      "path": "npcs/private_doctor.png",
+      "aliases": ["doctor", "physician", "old_man", "medical_witness"],
+      "tags": ["male", "doctor", "elder", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "robot_assistant",
-      "path": "npcs/robot_assistant.png",
-      "aliases": ["technician", "hacker", "digital_operator", "robot"],
-      "tags": ["tech", "digital", "operator", "assistant"]
+      "id": "technician",
+      "path": "npcs/technician.png",
+      "aliases": ["hacker", "digital_operator", "robot", "tech_operator"],
+      "tags": ["tech", "operator", "assistant", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "security_soldier",
-      "path": "npcs/security_soldier.png",
-      "aliases": ["security_guard", "guard", "soldier", "pursuer", "security"],
-      "tags": ["guard", "male", "security", "watcher"]
+      "id": "security_guard",
+      "path": "npcs/security_guard.png",
+      "aliases": ["guard", "soldier", "pursuer", "security", "security_npc"],
+      "tags": ["guard", "security", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "survivor",
-      "path": "npcs/survivor.png",
-      "aliases": ["assistant", "visitor", "helper", "witness_npc"],
-      "tags": ["male", "casual", "witness", "helper"]
+      "id": "assistant",
+      "path": "npcs/assistant.png",
+      "aliases": ["visitor", "helper", "support_staff", "guest"],
+      "tags": ["helper", "assistant", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "woman_green",
-      "path": "npcs/woman_green.png",
-      "aliases": ["teacher", "rival", "female_suspect", "tutor", "auction_rival"],
-      "tags": ["female", "suspect", "teacher", "business"]
+      "id": "female_suspect",
+      "path": "npcs/female_suspect.png",
+      "aliases": ["teacher", "rival", "auction_rival", "female_rival"],
+      "tags": ["female", "suspect", "upright", "sideview", "frontview", "2_5d"]
     },
     {
-      "id": "gaunt_figure",
-      "path": "npcs/gaunt_figure.png",
-      "aliases": ["victim_body", "corpse", "sick_man", "gaunt_victim"],
-      "tags": ["victim", "thin", "body", "ill"]
+      "id": "victim_body",
+      "path": "npcs/victim_body.png",
+      "aliases": ["corpse", "body", "gaunt_victim", "dead_victim"],
+      "tags": ["victim", "body", "scene", "2_5d"]
     }
   ],
   "interactable": [
     {
-      "id": "signal_jammer",
-      "path": "interactables/signal_jammer.png",
-      "aliases": ["jammer", "signal_blocker", "interference_device", "micro_jammer"],
-      "tags": ["device", "signal", "electronic", "digital"]
-    },
-    {
-      "id": "knife_tool",
-      "path": "interactables/knife_tool.png",
-      "aliases": ["knife", "blade", "kitchen_knife", "tool_blade"],
-      "tags": ["weapon", "blade", "sharp", "tool"]
-    },
-    {
       "id": "case_file",
       "path": "interactables/case_file.png",
       "aliases": ["file", "dossier", "documents", "case_clue", "records"],
-      "tags": ["paper", "records", "evidence", "clue"]
+      "tags": ["paper", "records", "evidence", "clue", "prop", "frontview"]
     },
     {
-      "id": "locked_door",
-      "path": "interactables/locked_door.png",
-      "aliases": ["door_locked", "study_door", "security_door", "metal_door", "closed_door"],
-      "tags": ["door", "entry", "locked", "barrier"]
-    },
-    {
-      "id": "open_door",
-      "path": "interactables/open_door.png",
-      "aliases": ["door_open", "opened_door", "doorway"],
-      "tags": ["door", "entry", "open", "passage"]
-    },
-    {
-      "id": "window_panel",
-      "path": "interactables/window_panel.png",
-      "aliases": ["window", "target_window", "glass_panel", "display_window"],
-      "tags": ["window", "glass", "panel", "view"]
+      "id": "guest_register",
+      "path": "interactables/guest_register.png",
+      "aliases": ["register", "ledger", "visitor_log", "guest_book"],
+      "tags": ["paper", "register", "desk_prop", "frontview"]
     },
     {
       "id": "control_console",
       "path": "interactables/control_console.png",
       "aliases": ["console", "control_panel", "tablet", "monitor", "terminal", "total_control_tablet"],
-      "tags": ["console", "terminal", "electronic", "control", "system"]
-    },
-    {
-      "id": "round_table",
-      "path": "interactables/round_table.png",
-      "aliases": ["table", "round_desk", "meeting_table"],
-      "tags": ["table", "desk", "surface", "furniture"]
+      "tags": ["console", "terminal", "electronic", "control", "system", "frontview"]
     },
     {
       "id": "evidence_crate",
       "path": "interactables/evidence_crate.png",
       "aliases": ["crate", "evidence_box", "storage_box"],
-      "tags": ["crate", "box", "storage", "container"]
+      "tags": ["crate", "box", "storage", "container", "prop", "frontview"]
     },
     {
       "id": "field_bag",
       "path": "interactables/field_bag.png",
       "aliases": ["bag", "satchel", "pack"],
-      "tags": ["bag", "container", "portable"]
+      "tags": ["bag", "container", "portable", "prop", "frontview"]
     },
     {
       "id": "small_bag",
       "path": "interactables/small_bag.png",
       "aliases": ["handbag", "pouch", "purse"],
-      "tags": ["bag", "small", "pouch", "portable"]
+      "tags": ["bag", "small", "pouch", "portable", "frontview"]
     },
     {
-      "id": "tool_bag",
-      "path": "interactables/tool_bag.png",
-      "aliases": ["toolkit", "tool_case", "tool_bag", "primary_tool"],
-      "tags": ["tool", "kit", "equipment", "case"]
+      "id": "tool_case",
+      "path": "interactables/tool_case.png",
+      "aliases": ["toolkit", "tool_bag", "primary_tool", "equipment_case"],
+      "tags": ["tool", "kit", "equipment", "case", "frontview"]
     },
     {
-      "id": "medical_bag",
-      "path": "interactables/medical_bag.png",
-      "aliases": ["medical_kit", "support_tool", "doctor_bag", "medicine_bag", "support_kit"],
-      "tags": ["medical", "support", "kit", "bag"]
+      "id": "support_kit",
+      "path": "interactables/support_kit.png",
+      "aliases": ["medical_kit", "support_tool", "doctor_bag", "medicine_bag", "medical_bag"],
+      "tags": ["medical", "support", "kit", "bag", "frontview"]
+    },
+    {
+      "id": "knife_tool",
+      "path": "interactables/knife_tool.png",
+      "aliases": ["knife", "blade", "kitchen_knife", "tool_blade"],
+      "tags": ["weapon", "blade", "sharp", "tool", "frontview"]
     },
     {
       "id": "handgun_tool",
       "path": "interactables/handgun_tool.png",
       "aliases": ["gun", "handgun", "pistol"],
-      "tags": ["weapon", "gun", "tool", "firearm"]
-    },
-    {
-      "id": "signal_rig",
-      "path": "interactables/signal_rig.png",
-      "aliases": ["machine", "device_rig", "relay"],
-      "tags": ["machine", "device", "electronic", "rig"]
+      "tags": ["weapon", "gun", "tool", "firearm", "sideview"]
     },
     {
       "id": "silencer_tool",
       "path": "interactables/silencer_tool.png",
       "aliases": ["silencer", "pen_tool", "pulse_pen"],
-      "tags": ["tool", "device", "compact", "weapon"]
+      "tags": ["tool", "device", "compact", "weapon", "frontview"]
+    },
+    {
+      "id": "signal_jammer",
+      "path": "interactables/signal_jammer.png",
+      "aliases": ["jammer", "signal_blocker", "interference_device", "micro_jammer"],
+      "tags": ["device", "signal", "electronic", "digital", "frontview"]
+    },
+    {
+      "id": "signal_rig",
+      "path": "interactables/signal_rig.png",
+      "aliases": ["machine", "device_rig", "relay"],
+      "tags": ["machine", "device", "electronic", "rig", "frontview"]
+    },
+    {
+      "id": "round_table",
+      "path": "interactables/round_table.png",
+      "aliases": ["table", "round_desk", "meeting_table"],
+      "tags": ["table", "desk", "surface", "furniture", "frontview"]
+    },
+    {
+      "id": "corridor_watch",
+      "path": "interactables/corridor_watch.png",
+      "aliases": ["clock", "watch", "hall_clock", "wall_clock"],
+      "tags": ["clock", "time", "wall", "prop", "frontview"]
+    },
+    {
+      "id": "window",
+      "path": "interactables/window.png",
+      "aliases": ["window_panel", "target_window", "glass_panel", "display_window"],
+      "tags": ["window", "glass", "panel", "view", "frontview"]
+    },
+    {
+      "id": "locked_door",
+      "path": "interactables/locked_door.png",
+      "aliases": ["door_locked", "study_door", "security_door", "metal_door", "closed_door"],
+      "tags": ["door", "entry", "locked", "barrier", "frontview"]
+    },
+    {
+      "id": "open_door",
+      "path": "interactables/open_door.png",
+      "aliases": ["door_open", "opened_door", "doorway"],
+      "tags": ["door", "entry", "open", "passage", "frontview"]
+    },
+    {
+      "id": "service_passage",
+      "path": "interactables/service_passage.png",
+      "aliases": ["service_door", "side_passage", "exit_passage", "back_passage"],
+      "tags": ["door", "passage", "exit", "frontview"]
     }
   ]
 }

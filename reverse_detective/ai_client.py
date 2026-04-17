@@ -477,10 +477,13 @@ class ReverseDetectiveAIClient:
             f"17. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
             "18. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
             "19. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "20. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
-            "21. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
-            "22. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
-            "23. All visible text content must be Simplified Chinese.\n"
+            "20. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_villa_hall.png, detective.png, or tool_case.png.\n"
+            "21. The bundled art library is 2.5D and stage-like: side-view or front-view rooms, upright characters, and front/side props with clear flat silhouettes.\n"
+            "22. Never imply top-down, overhead, bird's-eye, minimap, tactical-grid, or isometric map art. Asset hints must fit the local side/front-view library.\n"
+            "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, locked_door.png, open_door.png, or window.png.\n"
+            "24. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
+            "25. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
+            "26. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
@@ -515,12 +518,14 @@ class ReverseDetectiveAIClient:
                 "safe_x_range": list(LIVE_WORLD_X_RANGE),
                 "safe_y_range": list(LIVE_WORLD_Y_RANGE),
                 "distribution_rule": (
-                    "Spread NPCs and interactables across the room. "
+                    "Spread NPCs and interactables across the room like a side-view stage. "
                     "Do not cluster every entity into the top-left corner or a tiny area."
                 ),
                 "asset_hint_rule": (
                     "background_image and every image field are local asset hints, not URLs. "
-                    "Keep them short, lowercase, descriptive, ASCII-only, and ending in .png."
+                    "Keep them short, lowercase, descriptive, ASCII-only, and ending in .png. "
+                    "Prefer the bundled 2.5D side/front-view library with upright characters and front/side props. "
+                    "Never imply top-down, overhead, bird's-eye, or isometric art."
                 ),
             },
             "premise": _premise_to_dict(request.premise),
