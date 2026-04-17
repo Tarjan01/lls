@@ -164,3 +164,28 @@ def test_current_story_uses_runtime_player_name(monkeypatch: pytest.MonkeyPatch)
         assert "林岚" in background.menu_intro
     finally:
         pygame.quit()
+
+
+def test_textinput_updates_editor_for_chinese_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    try:
+        app._begin_input_edit(
+            field_name="detective_name",
+            title="侦探名字",
+            value="",
+            hint_text="支持中文输入。",
+        )
+
+        app._handle_textediting("林")
+        assert app._input_editor is not None
+        assert app._input_editor.composition == "林"
+
+        app._handle_textinput("林岚")
+
+        assert app._input_editor.value == "林岚"
+        assert app._input_editor.composition == ""
+    finally:
+        pygame.quit()

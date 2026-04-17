@@ -31,11 +31,13 @@ from reverse_detective.models import (
 )
 from reverse_detective.renderer import MenuRenderer, Renderer
 from reverse_detective.story_loader import build_story_premise, load_game_background, load_story_catalog
+from reverse_detective.utils.text_input import TextInputSession
 
 
 PLAY_AREA_HEIGHT = 520
 PLAYER_SIZE = (42, 62)
 PLAYER_SPEED = 240.0
+TEXT_INPUT_RECT = pygame.Rect(248, 236, 784, 180)
 MAIN_MENU_OPTIONS = ("开始游戏", "选项设置", "退出游戏")
 PLAYER_AVATAR_OPTIONS = ("male", "female")
 SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
@@ -159,8 +161,7 @@ class GameApp:
         self._running = True
         self._request_serial = 0
         self._settings_index = 0
-        self._editing_field: str | None = None
-        self._input_buffer = ""
+        self._input_editor: TextInputSession | None = None
         self._status_text: str | None = None
         self._settings_draft = SettingsDraft.from_config(
             config,
@@ -170,6 +171,10 @@ class GameApp:
         pygame.init()
         pygame.display.set_caption(config.display.title)
         self._screen = pygame.display.set_mode((config.display.width, config.display.height))
+        try:
+            pygame.scrap.init()
+        except pygame.error:
+            pass
         self._clock = pygame.time.Clock()
         self._game_renderer = Renderer(
             self._screen,
@@ -206,13 +211,17 @@ class GameApp:
                 self._running = False
             elif event.type == pygame.KEYDOWN:
                 self._handle_keydown(event.key, getattr(event, "unicode", ""))
+            elif event.type == pygame.TEXTINPUT:
+                self._handle_textinput(getattr(event, "text", ""))
+            elif event.type == pygame.TEXTEDITING:
+                self._handle_textediting(getattr(event, "text", ""))
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 self._handle_mousebuttondown(event.button, event.pos)
             elif event.type == pygame.MOUSEWHEEL:
                 self._handle_mousewheel(event.y)
 
     def _handle_keydown(self, key: int, text: str = "") -> None:
-        if self._editing_field is not None:
+        if self._input_editor is not None:
             self._handle_input_keydown(key, text)
             return
 
@@ -246,7 +255,7 @@ class GameApp:
         self._handle_game_keydown(key)
 
     def _handle_mousebuttondown(self, button: int, position: tuple[int, int]) -> None:
-        if self._editing_field is not None or self._detail_modal is not None:
+        if self._input_editor is not None or self._detail_modal is not None:
             return
 
         if button == 1:
@@ -365,8 +374,13 @@ class GameApp:
             elif field_kind == "choice":
                 self._cycle_choice_setting(field_name, 1)
             else:
-                self._editing_field = field_name
-                self._input_buffer = str(getattr(self._settings_draft, field_name))
+                self._begin_input_edit(
+                    field_name=field_name,
+                    title=self._field_label(field_name),
+                    value=str(getattr(self._settings_draft, field_name)),
+                    secret=field_kind == "secret",
+                    hint_text=self._input_hint(field_name, field_kind),
+                )
             return
 
         if key == pygame.K_s:
@@ -377,13 +391,53 @@ class GameApp:
             self._reset_settings_draft("已放弃未保存的修改")
 
     def _handle_input_keydown(self, key: int, text: str) -> None:
-        if self._editing_field is None:
+        editor = self._input_editor
+        if editor is None:
             return
 
         if key == pygame.K_ESCAPE:
-            self._editing_field = None
-            self._input_buffer = ""
-            self._status_text = "已取消输入"
+            self._cancel_input_edit()
+            self._status_text = "??????"
+            return
+
+        if key == pygame.K_v and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+            self._paste_clipboard_text()
+            return
+
+        if key == pygame.K_LEFT:
+            editor.move_left()
+            editor.clear_composition()
+            return
+
+        if key == pygame.K_RIGHT:
+            editor.move_right()
+            editor.clear_composition()
+            return
+
+        if key == pygame.K_HOME:
+            editor.move_home()
+            editor.clear_composition()
+            return
+
+        if key == pygame.K_END:
+            editor.move_end()
+            editor.clear_composition()
+            return
+
+        if key == pygame.K_DELETE:
+            editor.delete_forward()
+            editor.clear_composition()
+            return
+
+        if key == pygame.K_TAB:
+            return
+
+        if key == pygame.K_RETURN and editor.multiline:
+            if pygame.key.get_mods() & pygame.KMOD_CTRL:
+                self._commit_input_edit()
+            else:
+                editor.insert_text("\n")
+                editor.clear_composition()
             return
 
         if key == pygame.K_RETURN:
@@ -391,11 +445,92 @@ class GameApp:
             return
 
         if key == pygame.K_BACKSPACE:
-            self._input_buffer = self._input_buffer[:-1]
+            editor.backspace()
+            editor.clear_composition()
             return
 
-        if text and text.isprintable() and len(self._input_buffer) < 240:
-            self._input_buffer += text
+        if text and text.isprintable() and not self._should_rely_on_textinput():
+            editor.insert_text(text)
+            editor.clear_composition()
+
+    def _handle_textinput(self, text: str) -> None:
+        editor = self._input_editor
+        if editor is None or not text:
+            return
+        editor.insert_text(text)
+        editor.clear_composition()
+
+    def _handle_textediting(self, text: str) -> None:
+        editor = self._input_editor
+        if editor is None:
+            return
+        editor.set_composition(text)
+
+    def _begin_input_edit(
+        self,
+        *,
+        field_name: str,
+        title: str,
+        value: str,
+        multiline: bool = False,
+        secret: bool = False,
+        max_length: int = 240,
+        hint_text: str = "",
+        placeholder: str = "",
+    ) -> None:
+        self._input_editor = TextInputSession(
+            field_name=field_name,
+            title=title,
+            value=value,
+            multiline=multiline,
+            secret=secret,
+            max_length=max_length,
+            hint_text=hint_text,
+            placeholder=placeholder,
+            cursor=len(value),
+        )
+        self._activate_text_input()
+
+    def _cancel_input_edit(self) -> None:
+        self._input_editor = None
+        self._deactivate_text_input()
+
+    def _activate_text_input(self) -> None:
+        try:
+            pygame.key.start_text_input()
+            pygame.key.set_text_input_rect(TEXT_INPUT_RECT)
+        except pygame.error:
+            return
+
+    def _deactivate_text_input(self) -> None:
+        try:
+            pygame.key.stop_text_input()
+        except pygame.error:
+            return
+
+    def _paste_clipboard_text(self) -> None:
+        editor = self._input_editor
+        if editor is None:
+            return
+        try:
+            raw_clipboard = pygame.scrap.get(pygame.SCRAP_TEXT)
+        except (pygame.error, AttributeError):
+            raw_clipboard = None
+        if raw_clipboard is None:
+            return
+        if isinstance(raw_clipboard, bytes):
+            clipboard_text = raw_clipboard.decode("utf-8", errors="ignore").replace("\x00", "")
+        else:
+            clipboard_text = str(raw_clipboard)
+        if editor.multiline:
+            clipboard_text = clipboard_text.replace("\r\n", "\n").replace("\r", "\n")
+        else:
+            clipboard_text = clipboard_text.replace("\r", " ").replace("\n", " ")
+        editor.insert_text(clipboard_text)
+        editor.clear_composition()
+
+    def _should_rely_on_textinput(self) -> bool:
+        return hasattr(pygame, "TEXTINPUT")
 
     def _handle_game_keydown(self, key: int) -> None:
         if key == pygame.K_m:
@@ -682,14 +817,20 @@ class GameApp:
             return
 
         if self._mode == "settings":
+            active_editor = self._input_editor
             self._menu_renderer.draw_settings(
                 runtime_background,
                 list(SETTINGS_FIELDS),
                 self._settings_index,
                 self._settings_draft,
-                self._editing_field,
-                self._input_buffer,
+                None if active_editor is None else active_editor.field_name,
+                "" if active_editor is None else active_editor.value,
                 self._settings_status_text(),
+                input_hint="" if active_editor is None else active_editor.hint_text,
+                input_composition="" if active_editor is None else active_editor.composition,
+                input_cursor=0 if active_editor is None else active_editor.cursor,
+                input_multiline=False if active_editor is None else active_editor.multiline,
+                input_secret=False if active_editor is None else active_editor.secret,
                 operator_portrait_name=runtime_operator_name,
                 operator_portrait_gender=runtime_avatar_gender,
             )
@@ -723,8 +864,7 @@ class GameApp:
 
     def _start_selected_story(self) -> None:
         self._detail_modal = None
-        self._editing_field = None
-        self._input_buffer = ""
+        self._cancel_input_edit()
         self._clear_selected_text_readers()
         self._premise = build_story_premise(self.current_story, self.current_role.id)
         self._session = GameSessionState.create(self._premise)
@@ -747,8 +887,7 @@ class GameApp:
         self._session = None
         self._premise = None
         self._detail_modal = None
-        self._editing_field = None
-        self._input_buffer = ""
+        self._cancel_input_edit()
         self._clear_selected_text_readers()
         if status_text is not None:
             self._status_text = status_text
@@ -807,13 +946,13 @@ class GameApp:
         )
 
     def _commit_input_edit(self) -> None:
-        if self._editing_field is None:
+        editor = self._input_editor
+        if editor is None:
             return
 
-        field_name = self._editing_field
-        raw_value = self._input_buffer
-        self._editing_field = None
-        self._input_buffer = ""
+        field_name = editor.field_name
+        raw_value = editor.value
+        self._cancel_input_edit()
 
         try:
             if field_name == "window_title":
@@ -921,8 +1060,7 @@ class GameApp:
             self._status_text = "设置已保存。"
 
     def _reset_settings_draft(self, status_text: str | None = None) -> None:
-        self._editing_field = None
-        self._input_buffer = ""
+        self._cancel_input_edit()
         self._settings_draft = SettingsDraft.from_config(
             self._config,
             load_api_key(self._config.ai.credentials_path, self._config.ai.provider),
@@ -961,7 +1099,7 @@ class GameApp:
             return ReverseDetectiveAIClient(fallback)
 
     def _active_text_renderer(self) -> Renderer | MenuRenderer | None:
-        if self._editing_field is not None or self._detail_modal is not None:
+        if self._input_editor is not None or self._detail_modal is not None:
             return None
         if self._mode == "game":
             return self._game_renderer
@@ -991,6 +1129,20 @@ class GameApp:
             if candidate_name == field_name:
                 return label
         return field_name
+
+    def _input_hint(self, field_name: str, field_kind: str) -> str:
+        hints = {
+            "window_title": "支持直接输入窗口标题。回车保存。",
+            "detective_name": "支持中文输入法。回车保存名字。",
+            "base_url": "输入完整请求地址，例如 https://example.com/openai 。",
+            "api_key": "支持 Ctrl+V 粘贴。内容会以掩码显示。",
+            "model": "输入模型名，例如 gpt-5.4 。",
+            "reasoning_effort": "可用值: none / minimal / low / medium / high / xhigh。",
+            "timeout_seconds": "输入大于 0 的秒数，例如 120。",
+        }
+        if field_kind == "secret":
+            return hints.get(field_name, "支持粘贴。回车保存。")
+        return hints.get(field_name, "支持输入法与方向键移动光标，回车保存。")
 
     def _runtime_operator_name(self) -> str:
         candidate = self._config.player.detective_name.strip()

@@ -1300,6 +1300,11 @@ class MenuRenderer(TooltipMixin):
         input_buffer: str,
         status_text: str | None,
         *,
+        input_hint: str = "",
+        input_composition: str = "",
+        input_cursor: int = 0,
+        input_multiline: bool = False,
+        input_secret: bool = False,
         operator_portrait_name: str | None = None,
         operator_portrait_gender: str = "male",
     ) -> None:
@@ -1387,7 +1392,11 @@ class MenuRenderer(TooltipMixin):
             self._draw_input_modal(
                 title=self._field_label(editing_field, fields),
                 value=input_buffer,
-                masked=editing_field == "api_key",
+                masked=input_secret,
+                hint_text=input_hint,
+                composition=input_composition,
+                cursor_index=input_cursor,
+                multiline=input_multiline,
             )
         self._draw_tooltip_overlay()
         pygame.display.flip()
@@ -1718,12 +1727,23 @@ class MenuRenderer(TooltipMixin):
             rect.width - 48,
         )
 
-    def _draw_input_modal(self, title: str, value: str, masked: bool) -> None:
+    def _draw_input_modal(
+        self,
+        title: str,
+        value: str,
+        masked: bool,
+        *,
+        hint_text: str = "",
+        composition: str = "",
+        cursor_index: int = 0,
+        multiline: bool = False,
+    ) -> None:
         overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
         overlay.fill((6, 8, 12, 176))
         self._surface.blit(overlay, (0, 0))
 
-        rect = pygame.Rect(236, 220, self._width - 472, 172)
+        rect_height = 248 if multiline else 196
+        rect = pygame.Rect(236, 208 if multiline else 220, self._width - 472, rect_height)
         pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
         pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
         self._blit_clamped_line(
@@ -1735,25 +1755,68 @@ class MenuRenderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "Enter 保存输入 | Esc 取消",
+            "?????????? | Ctrl+V ?? | Esc ??"
+            if not multiline
+            else "?????????? | Ctrl+V ?? | Ctrl+Enter ?? | Esc ??",
             (rect.x + 24, rect.y + 56),
             (220, 223, 232),
             rect.width - 48,
         )
 
-        input_rect = pygame.Rect(rect.x + 22, rect.y + 96, rect.width - 44, 44)
+        input_rect = pygame.Rect(
+            rect.x + 22,
+            rect.y + 92,
+            rect.width - 44,
+            92 if multiline else 52,
+        )
         pygame.draw.rect(self._surface, (37, 42, 52), input_rect, border_radius=12)
         pygame.draw.rect(self._surface, (226, 193, 128), input_rect, width=2, border_radius=12)
         display_value = value if not masked else "*" * len(value)
-        self._blit_clamped_line(
-            self._small_font,
-            display_value or " ",
-            (input_rect.x + 12, input_rect.y + 13),
-            (244, 240, 233),
-            input_rect.width - 24,
-            selected=True,
-            tooltip_text=display_value or " ",
-        )
+        bounded_cursor = min(max(cursor_index, 0), len(display_value))
+        preview_value = f"{display_value[:bounded_cursor]}|{display_value[bounded_cursor:]}"
+
+        if multiline:
+            lines = wrap_text(preview_value or " ", self._small_font, input_rect.width - 24)
+            y = input_rect.y + 12
+            max_height = input_rect.bottom - 10
+            for line in lines[:4]:
+                rendered = self._small_font.render(line, True, (244, 240, 233))
+                self._surface.blit(rendered, (input_rect.x + 12, y))
+                y += rendered.get_height() + 6
+                if y > max_height:
+                    break
+            self._register_tooltip(input_rect, display_value or " ", selected=True, preferred_width=520)
+        else:
+            self._blit_clamped_line(
+                self._small_font,
+                preview_value or "|",
+                (input_rect.x + 12, input_rect.y + 15),
+                (244, 240, 233),
+                input_rect.width - 24,
+                selected=True,
+                tooltip_text=display_value or " ",
+            )
+
+        footer_y = input_rect.bottom + 10
+        if composition:
+            self._blit_clamped_line(
+                self._small_font,
+                f"????: {composition}",
+                (rect.x + 24, footer_y),
+                (235, 202, 140),
+                rect.width - 48,
+            )
+            footer_y += 22
+        if hint_text:
+            self._blit_preview_block(
+                self._small_font,
+                hint_text,
+                (rect.x + 24, footer_y),
+                (212, 217, 226),
+                rect.width - 48,
+                2,
+                line_gap=4,
+            )
 
     def _panel(self, rect: pygame.Rect, fill: Color) -> None:
         pygame.draw.rect(self._surface, fill, rect, border_radius=18)
