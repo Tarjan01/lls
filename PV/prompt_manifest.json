@@ -1,0 +1,199 @@
+{
+  "project_id": "reverse_detective_pv_v1",
+  "global_prompt_rules": {
+    "visual_style": [
+      "cinematic noir thriller",
+      "restrained acting",
+      "realistic modern crime drama",
+      "cold highlights and controlled contrast",
+      "glass reflections, rain, screen glow, museum lighting"
+    ],
+    "continuity_rules": [
+      "江川保持传奇侦探、四十多岁、克制危险的气质",
+      "镜海馆偏现代高端、透明、冷光、资本与艺术交织",
+      "听涛阁偏旧宅、暴雨、木质、封闭与窒息感",
+      "避免卡通化、科幻盔甲化、夸张动作戏",
+      "游戏 UI 镜头保留真实 Demo 录屏或手工 UI 合成感"
+    ],
+    "negative_prompt": "cartoon, anime, chibi, childish, exaggerated acting, oversaturated, fantasy armor, glossy mobile game ad, cheap 3D, distorted hands, extra fingers, unreadable text"
+  },
+  "prompts": [
+    {
+      "id": "shot_01",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Premiere / CapCut / ffmpeg drawtext",
+      "production_brief": "黑底白字，打字机逐字出现。字体建议衬线或打字机风格，间距克制，留足黑场。"
+    },
+    {
+      "id": "shot_02",
+      "generation_mode": "generate_video",
+      "tool_hint": "Kling / Hailuo / Runway",
+      "duration_sec": 3,
+      "positive_prompt": "传奇侦探江川的背影，独自坐在昏暗工作室里，桌面极简，房间里只有屏幕冷光慢慢亮起，映在他肩颈和手边，整个人沉默、专注、带危险感，modern noir thriller, cinematic lighting, subtle screen glow, restrained motion, realistic environment, 16:9",
+      "negative_prompt": "cartoon, anime, exaggerated acting, futuristic sci-fi chamber, fantasy props, neon overload",
+      "camera": "slow push-in from medium back shot",
+      "post_note": "后期可叠一层轻微 CRT 扫描线，增强游戏开机感。"
+    },
+    {
+      "id": "shot_03",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Figma + Premiere",
+      "production_brief": "做一版高质感游戏启动界面。先显示《逆转侦探》Logo，再淡入“选择你的身份”。可混入轻微屏幕噪点和系统启动动画。"
+    },
+    {
+      "id": "shot_04",
+      "generation_mode": "generate_video_and_edit",
+      "tool_hint": "Kling / Hailuo + Premiere",
+      "duration_sec": 4,
+      "positive_prompt": "高端玻璃美术馆夜景倒影，与暴雨中的中式宅邸窗边形成双重曝光式叠化，玻璃反光、雨滴、室内屏幕光交错，two murder simulation worlds colliding, modern crime thriller, elegant and ominous, cinematic reflections, 16:9",
+      "negative_prompt": "cartoon, fantasy mansion, bright sunny weather, cheap transition pack",
+      "camera": "start static, then layered cross dissolve with slight lateral drift",
+      "post_note": "建议拆成两个短底片生成，再用剪辑做叠化，比一次生成更稳。"
+    },
+    {
+      "id": "shot_05",
+      "generation_mode": "generate_video",
+      "tool_hint": "Kling / Hailuo",
+      "duration_sec": 3,
+      "positive_prompt": "镜海馆顶层穹厅，现代私人美术馆，玻璃与灯光交错，夜色映在展柜和地面，傅承泽的剪影站在展柜前，像一位优雅而可疑的馆长，money laundering undertone, luxury art crime atmosphere, cinematic noir, realistic reflections, subtle tension, 16:9",
+      "negative_prompt": "cartoon museum, colorful fantasy gallery, exaggerated villain pose, anime",
+      "camera": "slow dolly-in toward the silhouette",
+      "voiceover_line": "一位馆长，一场拍卖，一条洗白的暗线。"
+    },
+    {
+      "id": "shot_06",
+      "generation_mode": "generate_image",
+      "tool_hint": "MidJourney / Flux / SDXL",
+      "positive_prompt": "角色卡肖像，周姨，女性，馆务总监，沉静克制，手持一束钥匙，职业套装，现代高端艺术馆背景虚化，crime thriller character card, realistic portrait, elegant but guarded, subtle dramatic light",
+      "negative_prompt": "cartoon, anime, fantasy costume, smiling brightly",
+      "camera": "portrait with mild push-in in edit",
+      "post_note": "后期加角色名、身份标签和轻微卡片翻动。"
+    },
+    {
+      "id": "shot_07",
+      "generation_mode": "generate_image",
+      "tool_hint": "MidJourney / Flux / SDXL",
+      "positive_prompt": "角色卡肖像，阮知夏，拍卖竞争者，冷静锋利，指尖悬在键盘上，商务与攻防气质并存，night office glow, noir crime drama character card, realistic, premium, restrained",
+      "negative_prompt": "cartoon, anime, gamer neon, exaggerated fashion ad",
+      "camera": "portrait with slight parallax in edit"
+    },
+    {
+      "id": "shot_08",
+      "generation_mode": "generate_image",
+      "tool_hint": "MidJourney / Flux / SDXL",
+      "positive_prompt": "角色卡肖像，许岚，修复师，手边喷瓶与修复工具，表情专注又疲惫，fine art restoration room mood, realistic thriller portrait, controlled light, muted colors",
+      "negative_prompt": "cartoon, anime, fantasy alchemist, bright laboratory",
+      "camera": "portrait with object insert emphasis"
+    },
+    {
+      "id": "shot_09",
+      "generation_mode": "generate_image",
+      "tool_hint": "MidJourney / Flux / SDXL",
+      "positive_prompt": "角色卡肖像，何医生，私人医疗顾问，一支像钢笔的器具放入口袋，动作克制，眼神复杂， wealthy client medical scandal vibe, realistic noir character card, subtle menace, cinematic portrait",
+      "negative_prompt": "cartoon, anime doctor, bright clinic, comedy",
+      "camera": "portrait with close-up prop emphasis"
+    },
+    {
+      "id": "shot_10",
+      "generation_mode": "generate_video",
+      "tool_hint": "Kling / Hailuo",
+      "duration_sec": 3,
+      "positive_prompt": "暴雨猛烈敲打老宅窗户，听涛阁内光线昏暗，赵万山戴着 VR 头显坐在窗边或沙发边，毫无防备，old money mansion in storm, vulnerable tycoon, murder simulation undertone, realistic rain, cinematic suspense, 16:9",
+      "negative_prompt": "cartoon, cyberpunk helmet, fantasy palace, bright daylight",
+      "camera": "slow side drift with rain in foreground",
+      "voiceover_line": "一个大亨，一套系统，一场看似天衣无缝的意外。"
+    },
+    {
+      "id": "shot_11",
+      "generation_mode": "generate_image_batch",
+      "tool_hint": "MidJourney / Flux / SDXL",
+      "batch_subjects": [
+        "老陈：服侍赵家多年的老管家，沉默、旧式体面",
+        "苏曼：地产竞争者，年轻锋利，商业攻击性强",
+        "林老师：家庭教师，温柔知性但压着秘密",
+        "张博士：私人医生，精英感与风险感并存"
+      ],
+      "production_brief": "统一一套角色卡版式与光比。四张图后期快速快切，每张 0.5 秒。"
+    },
+    {
+      "id": "shot_12",
+      "generation_mode": "record_or_mock_ui",
+      "tool_hint": "直接录 Demo / 手工 UI 合成",
+      "production_brief": "录一段真实游戏：角色在 2.5D 场景里移动，靠近交互点后弹出选项框。优先真实操作，不建议交给文生视频。"
+    },
+    {
+      "id": "shot_13",
+      "generation_mode": "record_or_mock_ui",
+      "tool_hint": "直接录 Demo / 后期补鼠标与高亮",
+      "production_brief": "拉近到选项框，保留“拿起厨刀 / 直接行凶”两项。光标停在“直接行凶”，音乐在这里断一拍。"
+    },
+    {
+      "id": "shot_14",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Premiere",
+      "production_brief": "黑屏大字。建议让文本先模糊后锐化，营造一句判词砸下来的感觉。"
+    },
+    {
+      "id": "shot_15",
+      "generation_mode": "generate_video_and_edit",
+      "tool_hint": "Kling / Hailuo + Premiere",
+      "duration_sec": 6,
+      "positive_prompt": "高压犯罪蒙太奇：证据表面被擦净、监控时间戳漂移、删除日志进度条、玻璃倒影里缺失的人影，all implying a perfect cover-up, realistic, cinematic crime thriller, fragmented reflections, digital interference, elegant but tense, 16:9",
+      "negative_prompt": "cartoon, goofy hacking UI, fantasy magic effect, gore overload",
+      "camera": "montage of 4-5 ultra short inserts with hard rhythmic cuts",
+      "post_note": "这段建议拆成 4 个小素材分别生成，再按鼓点拼接。"
+    },
+    {
+      "id": "shot_16",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Figma + Premiere",
+      "production_brief": "做一版评分结算 UI：S级——传奇大师，副文案“警方把案件写成意外坠亡”。质感要像高端心理模拟系统，而不是手游结算页。"
+    },
+    {
+      "id": "shot_17",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects",
+      "production_brief": "从镜头 16 的评分画面直接碎裂到“失败——拙劣模仿”，辅以玻璃裂纹和故障闪。"
+    },
+    {
+      "id": "shot_18",
+      "generation_mode": "generate_video",
+      "tool_hint": "Kling / Hailuo",
+      "duration_sec": 3,
+      "positive_prompt": "江川近景特写，四十多岁传奇侦探，脸上有疲惫与危险的平静，缓慢转头看向镜头外，嘴角轻微上扬，like he is testing the viewer, realistic skin detail, noir close-up, restrained but chilling, cinematic portrait, 16:9",
+      "negative_prompt": "cartoon, anime, exaggerated evil grin, bright TV drama lighting",
+      "camera": "tight close-up with slow head turn",
+      "voiceover_line": "玩得好，就能破案。"
+    },
+    {
+      "id": "shot_19",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "Premiere / After Effects",
+      "production_brief": "黑屏或极暗背景，保留江川最后半句旁白：……但首先，你得学会犯案。这里靠声音和留白，不靠复杂画面。"
+    },
+    {
+      "id": "shot_20",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects",
+      "production_brief": "Logo 从黑暗中缓慢浮出，速度要慢，给品牌收束空间。可叠很轻的金属质感与低频冲击。"
+    },
+    {
+      "id": "shot_21",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Premiere",
+      "production_brief": "副标题“你是侦探，也是凶手”淡入。和 Logo 同一排版体系。"
+    },
+    {
+      "id": "shot_22",
+      "generation_mode": "manual_motion_graphic",
+      "tool_hint": "After Effects / Premiere",
+      "production_brief": "CTA 文案“现已开放 Demo 试玩”缓慢打字或淡入，不要做得像广告贴片，保持克制。"
+    },
+    {
+      "id": "shot_23",
+      "generation_mode": "manual_hold",
+      "tool_hint": "Premiere / ffmpeg",
+      "production_brief": "黑屏保持 2-5 秒，让音乐自然落完。"
+    }
+  ]
+}

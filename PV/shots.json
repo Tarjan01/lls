@@ -1,0 +1,650 @@
+{
+  "project_id": "reverse_detective_pv_v1",
+  "project_title": "《逆转侦探》PV",
+  "source_file": "PV/readme.md",
+  "source_declared_duration_sec": 90,
+  "rough_cut_duration_sec": 71,
+  "timing_note": "原始分镜段落标注约 90 秒，但逐镜头时长相加为 71 秒。执行时建议通过镜头 05、10、15、18、20、23 的延长、黑场呼吸和音乐尾奏补足至 85-90 秒。",
+  "output_format": {
+    "aspect_ratio": "16:9",
+    "resolution": "1920x1080",
+    "fps": 24,
+    "audio_sample_rate": 48000
+  },
+  "style_bible": {
+    "tone": [
+      "悬疑",
+      "克制",
+      "反转感",
+      "黑色电影气质",
+      "现代犯罪惊悚"
+    ],
+    "visual_rules": [
+      "避免卡通和二次元质感",
+      "优先使用写实灯光、玻璃反射、雨夜、屏幕光源",
+      "镜头运动以缓推、横移、轻微视角偏移为主",
+      "避免夸张表演和过饱和色彩",
+      "保持镜海馆与听涛阁两个案件的视觉反差"
+    ],
+    "negative_style_tags": [
+      "cartoon",
+      "anime",
+      "chibi",
+      "overacting",
+      "oversaturated",
+      "fantasy armor",
+      "cheap game ad"
+    ]
+  },
+  "audio_plan": {
+    "music_prompt": "noir jazz, suspenseful piano, cinematic thriller, slow build to intense climax, 90 seconds",
+    "voiceover_priority_shots": [
+      "05",
+      "10",
+      "18",
+      "19"
+    ],
+    "sfx_motifs": [
+      "typewriter",
+      "computer fan",
+      "rain on glass",
+      "UI hover/click",
+      "glass shatter",
+      "deep logo hit"
+    ]
+  },
+  "shots": [
+    {
+      "id": "01",
+      "section": "开场段落",
+      "timeline": {
+        "in_sec": 0,
+        "out_sec": 4,
+        "duration_sec": 4
+      },
+      "shot_type": "title_card",
+      "production_mode": "manual_motion_graphic",
+      "visual": "极暗背景，一行白字用打字机效果逐字出现：每一个大侦探，都曾在黑暗里练习。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "typewriter",
+          "low_sub_rumble"
+        ],
+        "music_cue": "ambient_intro"
+      },
+      "editorial": {
+        "transition_in": "fade_from_black",
+        "transition_out": "hard_cut",
+        "subtitle": "每一个大侦探，都曾在黑暗里练习。"
+      },
+      "asset_target": "PV/assets/shot_01_title_card.mp4",
+      "prompt_id": "shot_01"
+    },
+    {
+      "id": "02",
+      "section": "开场段落",
+      "timeline": {
+        "in_sec": 4,
+        "out_sec": 7,
+        "duration_sec": 3
+      },
+      "shot_type": "video_gen",
+      "production_mode": "generate_video",
+      "visual": "江川背影坐在昏暗房间里，面前屏幕亮起，映出游戏开机画面。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "computer_fan_rise"
+        ],
+        "music_cue": "suspense_pad"
+      },
+      "editorial": {
+        "transition_in": "hard_cut",
+        "transition_out": "hard_cut"
+      },
+      "asset_target": "PV/assets/shot_02_jiangchuan_boot.mp4",
+      "prompt_id": "shot_02"
+    },
+    {
+      "id": "03",
+      "section": "开场段落",
+      "timeline": {
+        "in_sec": 7,
+        "out_sec": 11,
+        "duration_sec": 4
+      },
+      "shot_type": "screen_motion_graphic",
+      "production_mode": "manual_motion_graphic",
+      "visual": "屏幕特写显示《逆转侦探》，随后出现“选择你的身份”。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "ui_boot",
+          "screen_glitch_soft"
+        ],
+        "music_cue": "low_strings"
+      },
+      "editorial": {
+        "transition_in": "hard_cut",
+        "transition_out": "glitch_cut"
+      },
+      "asset_target": "PV/assets/shot_03_game_boot_ui.mp4",
+      "prompt_id": "shot_03"
+    },
+    {
+      "id": "04",
+      "section": "开场段落",
+      "timeline": {
+        "in_sec": 11,
+        "out_sec": 15,
+        "duration_sec": 4
+      },
+      "shot_type": "video_composite",
+      "production_mode": "generate_video_and_edit",
+      "visual": "镜海馆玻璃墙倒影与听涛阁暴雨窗边两组镜头快速叠化。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "glass_whoosh",
+          "rain_hit"
+        ],
+        "music_cue": "tempo_pickup"
+      },
+      "editorial": {
+        "transition_in": "glitch_cut",
+        "transition_out": "match_dissolve"
+      },
+      "asset_target": "PV/assets/shot_04_case_world_mashup.mp4",
+      "prompt_id": "shot_04"
+    },
+    {
+      "id": "05",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 15,
+        "out_sec": 18,
+        "duration_sec": 3
+      },
+      "shot_type": "video_gen",
+      "production_mode": "generate_video",
+      "story_reference": "glass_gallery_closing_night",
+      "visual": "镜海馆顶层穹厅，玻璃与灯光交错，傅承泽的剪影出现在展柜前。",
+      "audio": {
+        "voiceover": "一位馆长，一场拍卖，一条洗白的暗线。",
+        "sfx": [
+          "room_tone",
+          "soft_glass_resonance"
+        ],
+        "music_cue": "noir_bass"
+      },
+      "editorial": {
+        "transition_in": "match_dissolve",
+        "transition_out": "hard_cut",
+        "hold_extension_candidate_sec": 2
+      },
+      "asset_target": "PV/assets/shot_05_gallery_hall.mp4",
+      "prompt_id": "shot_05"
+    },
+    {
+      "id": "06",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 18,
+        "out_sec": 20,
+        "duration_sec": 2
+      },
+      "shot_type": "character_card",
+      "production_mode": "generate_image",
+      "story_reference": "glass_gallery_closing_night",
+      "visual": "周姨角色卡，馆务总监，手持钥匙束，表情沉静。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "card_flip"
+        ],
+        "music_cue": "pulse"
+      },
+      "editorial": {
+        "transition_in": "card_flip_in",
+        "transition_out": "card_slide"
+      },
+      "asset_target": "PV/assets/shot_06_zhouyi_card.png",
+      "prompt_id": "shot_06"
+    },
+    {
+      "id": "07",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 20,
+        "out_sec": 22,
+        "duration_sec": 2
+      },
+      "shot_type": "character_card",
+      "production_mode": "generate_image",
+      "story_reference": "glass_gallery_closing_night",
+      "visual": "阮知夏角色卡，拍卖竞争者，指尖悬在键盘上。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "card_flip"
+        ],
+        "music_cue": "pulse"
+      },
+      "editorial": {
+        "transition_in": "card_flip_in",
+        "transition_out": "card_slide"
+      },
+      "asset_target": "PV/assets/shot_07_ruanzhixia_card.png",
+      "prompt_id": "shot_07"
+    },
+    {
+      "id": "08",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 22,
+        "out_sec": 24,
+        "duration_sec": 2
+      },
+      "shot_type": "character_card",
+      "production_mode": "generate_image",
+      "story_reference": "glass_gallery_closing_night",
+      "visual": "许岚角色卡，修复师，喷瓶特写。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "card_flip"
+        ],
+        "music_cue": "pulse"
+      },
+      "editorial": {
+        "transition_in": "card_flip_in",
+        "transition_out": "card_slide"
+      },
+      "asset_target": "PV/assets/shot_08_xulan_card.png",
+      "prompt_id": "shot_08"
+    },
+    {
+      "id": "09",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 24,
+        "out_sec": 26,
+        "duration_sec": 2
+      },
+      "shot_type": "character_card",
+      "production_mode": "generate_image",
+      "story_reference": "glass_gallery_closing_night",
+      "visual": "何医生角色卡，一支钢笔放入口袋。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "card_flip"
+        ],
+        "music_cue": "pulse"
+      },
+      "editorial": {
+        "transition_in": "card_flip_in",
+        "transition_out": "hard_cut"
+      },
+      "asset_target": "PV/assets/shot_09_hedoctor_card.png",
+      "prompt_id": "shot_09"
+    },
+    {
+      "id": "10",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 26,
+        "out_sec": 29,
+        "duration_sec": 3
+      },
+      "shot_type": "video_gen",
+      "production_mode": "generate_video",
+      "story_reference": "tingtaoge_last_night",
+      "visual": "暴雨打在听涛阁窗上，赵万山戴着 VR 头显，毫无防备。",
+      "audio": {
+        "voiceover": "一个大亨，一套系统，一场看似天衣无缝的意外。",
+        "sfx": [
+          "rain_surge",
+          "window_rattle"
+        ],
+        "music_cue": "drone_rise"
+      },
+      "editorial": {
+        "transition_in": "rain_hit_cut",
+        "transition_out": "hard_cut",
+        "hold_extension_candidate_sec": 2
+      },
+      "asset_target": "PV/assets/shot_10_tingtaoge_vr.mp4",
+      "prompt_id": "shot_10"
+    },
+    {
+      "id": "11",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 29,
+        "out_sec": 31,
+        "duration_sec": 2
+      },
+      "shot_type": "character_montage",
+      "production_mode": "generate_image_batch",
+      "story_reference": "tingtaoge_last_night",
+      "visual": "老陈、苏曼、林老师、张博士四张角色卡快切，每张停留约 0.5 秒。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "drum_hits"
+        ],
+        "music_cue": "percussive_stab"
+      },
+      "editorial": {
+        "transition_in": "fast_cut",
+        "transition_out": "hard_cut"
+      },
+      "asset_target": "PV/assets/shot_11_tingtaoge_cards/",
+      "prompt_id": "shot_11"
+    },
+    {
+      "id": "12",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 31,
+        "out_sec": 35,
+        "duration_sec": 4
+      },
+      "shot_type": "ui_capture",
+      "production_mode": "record_or_mock_ui",
+      "visual": "玩家角色在 2.5D 场景中移动，靠近展柜，弹出选项框。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "footsteps_soft",
+          "ui_popup"
+        ],
+        "music_cue": "tension_hold"
+      },
+      "editorial": {
+        "transition_in": "hard_cut",
+        "transition_out": "push_in"
+      },
+      "asset_target": "PV/assets/shot_12_gameplay_capture.mp4",
+      "prompt_id": "shot_12"
+    },
+    {
+      "id": "13",
+      "section": "案件展示段",
+      "timeline": {
+        "in_sec": 35,
+        "out_sec": 38,
+        "duration_sec": 3
+      },
+      "shot_type": "ui_capture",
+      "production_mode": "record_or_mock_ui",
+      "visual": "选项框特写，显示“拿起厨刀 / 直接行凶”，光标悬停在“直接行凶”。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "ui_hover",
+          "music_stutter_stop"
+        ],
+        "music_cue": "one_beat_stop"
+      },
+      "editorial": {
+        "transition_in": "push_in",
+        "transition_out": "cut_to_black"
+      },
+      "asset_target": "PV/assets/shot_13_choice_closeup.mp4",
+      "prompt_id": "shot_13"
+    },
+    {
+      "id": "14",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 38,
+        "out_sec": 41,
+        "duration_sec": 3
+      },
+      "shot_type": "title_card",
+      "production_mode": "manual_motion_graphic",
+      "visual": "黑屏，一行字出现：侦探，今晚扮演凶手。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "single_piano_note"
+        ],
+        "music_cue": "impact_reset"
+      },
+      "editorial": {
+        "transition_in": "cut_to_black",
+        "transition_out": "hard_cut",
+        "subtitle": "侦探，今晚扮演凶手。"
+      },
+      "asset_target": "PV/assets/shot_14_twist_card.mp4",
+      "prompt_id": "shot_14"
+    },
+    {
+      "id": "15",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 41,
+        "out_sec": 47,
+        "duration_sec": 6
+      },
+      "shot_type": "video_montage",
+      "production_mode": "generate_video_and_edit",
+      "visual": "证据被抹去、监控信号漂移、日志删除进度条、玻璃倒影中看不见的身影，构成高压蒙太奇。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "forensic_wipe",
+          "cctv_glitch",
+          "digital_delete",
+          "glass_reflection_whoosh"
+        ],
+        "music_cue": "full_climax"
+      },
+      "editorial": {
+        "transition_in": "hard_cut",
+        "transition_out": "whip_cut",
+        "hold_extension_candidate_sec": 3
+      },
+      "asset_target": "PV/assets/shot_15_montage.mp4",
+      "prompt_id": "shot_15"
+    },
+    {
+      "id": "16",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 47,
+        "out_sec": 50,
+        "duration_sec": 3
+      },
+      "shot_type": "ui_motion_graphic",
+      "production_mode": "manual_motion_graphic",
+      "visual": "评分结算画面出现：S级——传奇大师，配文“警方把案件写成意外坠亡”。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "score_reward"
+        ],
+        "music_cue": "triumph_sting"
+      },
+      "editorial": {
+        "transition_in": "whip_cut",
+        "transition_out": "screen_shatter_prep"
+      },
+      "asset_target": "PV/assets/shot_16_success_grade.mp4",
+      "prompt_id": "shot_16"
+    },
+    {
+      "id": "17",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 50,
+        "out_sec": 52,
+        "duration_sec": 2
+      },
+      "shot_type": "ui_motion_graphic",
+      "production_mode": "manual_motion_graphic",
+      "visual": "评分画面碎裂，切到“失败——拙劣模仿”，配文“铁证如山”。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "glass_shatter"
+        ],
+        "music_cue": "cliff_drop"
+      },
+      "editorial": {
+        "transition_in": "glass_break_transition",
+        "transition_out": "hard_cut"
+      },
+      "asset_target": "PV/assets/shot_17_fail_grade.mp4",
+      "prompt_id": "shot_17"
+    },
+    {
+      "id": "18",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 52,
+        "out_sec": 55,
+        "duration_sec": 3
+      },
+      "shot_type": "video_gen",
+      "production_mode": "generate_video",
+      "visual": "江川特写，转头看向屏幕外，嘴角轻微上扬。",
+      "audio": {
+        "voiceover": "玩得好，就能破案。",
+        "sfx": [],
+        "music_cue": "sudden_breath"
+      },
+      "editorial": {
+        "transition_in": "hard_cut",
+        "transition_out": "micro_pause",
+        "hold_extension_candidate_sec": 2
+      },
+      "asset_target": "PV/assets/shot_18_jiangchuan_closeup.mp4",
+      "prompt_id": "shot_18"
+    },
+    {
+      "id": "19",
+      "section": "核心反转段",
+      "timeline": {
+        "in_sec": 55,
+        "out_sec": 59,
+        "duration_sec": 4
+      },
+      "shot_type": "black_screen_voiceover",
+      "production_mode": "manual_motion_graphic",
+      "visual": "轻停顿后由江川补上一句：但首先，你得学会犯案。",
+      "audio": {
+        "voiceover": "……但首先，你得学会犯案。",
+        "sfx": [],
+        "music_cue": "tail_piano"
+      },
+      "editorial": {
+        "transition_in": "cut_to_black",
+        "transition_out": "slow_fade_in"
+      },
+      "asset_target": "PV/assets/shot_19_voiceover_card.mp4",
+      "prompt_id": "shot_19"
+    },
+    {
+      "id": "20",
+      "section": "结尾落版段",
+      "timeline": {
+        "in_sec": 59,
+        "out_sec": 63,
+        "duration_sec": 4
+      },
+      "shot_type": "logo_reveal",
+      "production_mode": "manual_motion_graphic",
+      "visual": "游戏 Logo 从黑暗中缓慢浮现：逆转侦探。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "logo_hit_low"
+        ],
+        "music_cue": "resolve"
+      },
+      "editorial": {
+        "transition_in": "slow_fade_in",
+        "transition_out": "hold",
+        "hold_extension_candidate_sec": 2
+      },
+      "asset_target": "PV/assets/shot_20_logo.mp4",
+      "prompt_id": "shot_20"
+    },
+    {
+      "id": "21",
+      "section": "结尾落版段",
+      "timeline": {
+        "in_sec": 63,
+        "out_sec": 66,
+        "duration_sec": 3
+      },
+      "shot_type": "subtitle_card",
+      "production_mode": "manual_motion_graphic",
+      "visual": "副标题淡入：你是侦探，也是凶手。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [],
+        "music_cue": "music_tail"
+      },
+      "editorial": {
+        "transition_in": "fade_in",
+        "transition_out": "crossfade"
+      },
+      "asset_target": "PV/assets/shot_21_tagline.mp4",
+      "prompt_id": "shot_21"
+    },
+    {
+      "id": "22",
+      "section": "结尾落版段",
+      "timeline": {
+        "in_sec": 66,
+        "out_sec": 69,
+        "duration_sec": 3
+      },
+      "shot_type": "cta_card",
+      "production_mode": "manual_motion_graphic",
+      "visual": "最后一行字缓慢打出：现已开放 Demo 试玩。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [
+          "ui_notice_soft"
+        ],
+        "music_cue": "music_tail"
+      },
+      "editorial": {
+        "transition_in": "crossfade",
+        "transition_out": "fade_to_black"
+      },
+      "asset_target": "PV/assets/shot_22_cta.mp4",
+      "prompt_id": "shot_22"
+    },
+    {
+      "id": "23",
+      "section": "结尾落版段",
+      "timeline": {
+        "in_sec": 69,
+        "out_sec": 71,
+        "duration_sec": 2
+      },
+      "shot_type": "black_out",
+      "production_mode": "manual_hold",
+      "visual": "黑屏结束。",
+      "audio": {
+        "voiceover": null,
+        "sfx": [],
+        "music_cue": "music_decay"
+      },
+      "editorial": {
+        "transition_in": "fade_to_black",
+        "transition_out": "end",
+        "hold_extension_candidate_sec": 3
+      },
+      "asset_target": "PV/assets/shot_23_black_end.mp4",
+      "prompt_id": "shot_23"
+    }
+  ]
+}
