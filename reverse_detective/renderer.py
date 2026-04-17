@@ -657,7 +657,7 @@ class Renderer(TooltipMixin):
             self._register_tooltip(row_rect, body, selected=is_selected, preferred_width=520)
             row_y += 42
 
-        action_rect = pygame.Rect(rail_rect.x + 16, rail_rect.bottom - 78, rail_rect.width - 32, 56)
+        action_rect = pygame.Rect(36, self._hud_top + 110, 320, 52)
         pygame.draw.rect(self._surface, (108, 70, 52), action_rect, border_radius=14)
         pygame.draw.rect(self._surface, (242, 210, 168), action_rect, width=2, border_radius=14)
         self._blit_clamped_line(
@@ -669,8 +669,8 @@ class Renderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "点击呼出输入框，立即交给 AI 裁定",
-            (action_rect.x + 14, action_rect.y + 29),
+            "输入当前选项外的行动",
+            (action_rect.x + 14, action_rect.y + 27),
             (244, 225, 201),
             action_rect.width - 28,
         )

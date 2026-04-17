@@ -217,3 +217,47 @@ def test_menu_renderer_prefers_cybernoir_loft_background(
         assert surface.get_at((12, 12))[:3] == (180, 30, 40)
     finally:
         pygame.quit()
+
+
+def test_renderer_places_freeform_action_trigger_left_of_sidebar(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "silent.mp3",
+                "description": "自由行动入口布局测试",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "用于确认自由行动按钮不会再压在右侧栏卡片上。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    session = GameSessionState.create(build_default_premise())
+    session.finish_initial_scene(scene)
+
+    try:
+        renderer.draw(session, "Live API", 0.0, "玩家", "演示卷宗")
+
+        assert len(renderer._action_targets) == 1
+        action_rect = renderer._action_targets[0].rect
+        sidebar_left = renderer._width - 266
+
+        assert renderer.consume_action_click(action_rect.center) == "open_freeform_action"
+        assert action_rect.right < sidebar_left
+    finally:
+        pygame.quit()
