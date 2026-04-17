@@ -103,6 +103,7 @@ DEFAULT_INITIAL_SCENE_CACHE_ROOT = Path("~/.reverse_detective/cache/initial_scen
 SHORT_TIMEOUT_OVERALL_BUFFER_SECONDS = 0.5
 STREAM_DEADLINE_MIN_BUFFER_SECONDS = 20.0
 STREAM_DEADLINE_BUFFER_MULTIPLIER = 1.25
+DEFAULT_INITIAL_BACKGROUND_IMAGE = "cybernoir_loft_lounge.png"
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,13 +163,15 @@ class ReverseDetectiveAIClient:
             pass
 
     def generate_initial_scene(self, premise: StoryPremise) -> SceneState:
-        scene = self._generate_scene(
-            AIRequestPayload(
-                request_type="initial_scene",
-                premise=premise,
-                current_scene=None,
-                history=(),
-                recent_actions=(),
+        scene = self._apply_initial_scene_background(
+            self._generate_scene(
+                AIRequestPayload(
+                    request_type="initial_scene",
+                    premise=premise,
+                    current_scene=None,
+                    history=(),
+                    recent_actions=(),
+                )
             )
         )
         self._write_initial_scene_cache(premise, scene)
@@ -179,7 +182,7 @@ class ReverseDetectiveAIClient:
         if local_payload is not None:
             scene = self._load_scene_from_cache_payload(local_payload)
             if scene is not None:
-                return scene
+                return self._apply_initial_scene_background(scene)
 
         cache_path = self._initial_scene_cache_path(premise)
         if not cache_path.exists():
@@ -190,7 +193,18 @@ class ReverseDetectiveAIClient:
         except (OSError, json.JSONDecodeError):
             return None
 
-        return self._load_scene_from_cache_payload(payload)
+        scene = self._load_scene_from_cache_payload(payload)
+        if scene is None:
+            return None
+        return self._apply_initial_scene_background(scene)
+
+    def _apply_initial_scene_background(self, scene: SceneState) -> SceneState:
+        if scene.scene.background_image == DEFAULT_INITIAL_BACKGROUND_IMAGE:
+            return scene
+
+        payload = scene_to_dict(scene)
+        payload["scene"]["background_image"] = DEFAULT_INITIAL_BACKGROUND_IMAGE
+        return load_scene_payload(payload)
 
     def prefetch_initial_scene(self, premise: StoryPremise, *, force: bool = False) -> bool:
         cache_key = self._initial_scene_cache_key(premise)
@@ -216,6 +230,7 @@ class ReverseDetectiveAIClient:
 
         threading.Thread(target=worker, daemon=True).start()
         return True
+
 
     def settle_round(
         self,

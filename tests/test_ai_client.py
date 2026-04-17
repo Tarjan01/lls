@@ -37,6 +37,7 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
 
     assert client.mode_label == "Mock Story"
     assert scene.game_status == "ongoing"
+    assert scene.scene.background_image == "cybernoir_loft_lounge.png"
     assert len(scene.interactables) >= 3
 
 
@@ -585,6 +586,7 @@ def test_initial_scene_cache_roundtrip_loads_saved_scene(tmp_path: Path) -> None
 
     assert cached_scene is not None
     assert cached_scene.scene.description == scene.scene.description
+    assert cached_scene.scene.background_image == "cybernoir_loft_lounge.png"
     assert client.mode_label.startswith("Cached")
 
 
@@ -636,4 +638,5 @@ def test_local_story_cache_file_is_used_when_available(
 
     assert scene is not None
     assert scene.scene.description == "本地首包"
+    assert scene.scene.background_image == "cybernoir_loft_lounge.png"
     assert client.mode_label == "Cached Mock Story"
