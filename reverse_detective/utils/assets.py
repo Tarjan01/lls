@@ -20,8 +20,13 @@ _KIND_DIRECTORIES = {
     "npc": "npcs",
     "interactable": "interactables",
 }
+_KIND_LIBRARY_FILENAMES = {
+    "background": Path("backgrounds/library.json"),
+}
 _CATALOG_FILENAME = "catalog.json"
 _CATALOG_CACHE: dict[Path, dict[str, list[dict[str, Any]]]] = {}
+_KIND_LIBRARY_CACHE: dict[tuple[Path, str], list[dict[str, Any]]] = {}
+_MIN_CATALOG_MATCH_SCORE = 20.0
 
 
 def resolve_asset_path(
@@ -50,9 +55,18 @@ def resolve_asset_path(
     if candidate_by_name.is_file():
         return candidate_by_name.resolve()
 
+    library_match = _resolve_from_kind_library(root, asset_kind, cleaned_ref, hint_texts)
+    if library_match is not None:
+        return library_match
+
     catalog_match = _resolve_from_catalog(root, asset_kind, cleaned_ref, hint_texts)
     if catalog_match is not None:
         return catalog_match
+
+    if asset_kind == "background":
+        fallback_background = _resolve_default_background(root)
+        if fallback_background is not None:
+            return fallback_background
 
     return candidate_by_name
 
@@ -83,6 +97,25 @@ def _resolve_from_catalog(
 ) -> Path | None:
     catalog = _load_catalog(root)
     entries = catalog.get(asset_kind, [])
+    return _resolve_from_entries(root, entries, asset_ref, hint_texts)
+
+
+def _resolve_from_kind_library(
+    root: Path,
+    asset_kind: str,
+    asset_ref: str,
+    hint_texts: Iterable[str],
+) -> Path | None:
+    entries = _load_kind_library(root, asset_kind)
+    return _resolve_from_entries(root, entries, asset_ref, hint_texts)
+
+
+def _resolve_from_entries(
+    root: Path,
+    entries: Iterable[dict[str, Any]],
+    asset_ref: str,
+    hint_texts: Iterable[str],
+) -> Path | None:
     if not entries:
         return None
 
@@ -108,9 +141,41 @@ def _resolve_from_catalog(
             best_score = score
             best_path = entry_path
 
-    if best_score <= 0:
+    if best_score < _MIN_CATALOG_MATCH_SCORE:
         return None
     return best_path
+
+
+def _resolve_default_background(root: Path) -> Path | None:
+    entries = _load_kind_library(root, "background")
+    if not entries:
+        return None
+
+    default_candidates: list[Path] = []
+    fallback_candidates: list[Path] = []
+    for entry in entries:
+        relative_path = entry.get("path")
+        if not isinstance(relative_path, str) or not relative_path.strip():
+            continue
+
+        entry_path = (root / relative_path).resolve()
+        if not entry_path.is_file():
+            continue
+
+        fallback_candidates.append(entry_path)
+        markers = {
+            _normalize_text(str(entry.get("id", ""))),
+            *(_normalize_text(value) for value in _as_string_list(entry.get("aliases"))),
+            *(_normalize_text(value) for value in _as_string_list(entry.get("tags"))),
+        }
+        if "default" in markers:
+            default_candidates.append(entry_path)
+
+    if default_candidates:
+        return default_candidates[0]
+    if fallback_candidates:
+        return fallback_candidates[0]
+    return None
 
 
 def _score_catalog_entry(
@@ -182,6 +247,42 @@ def _load_catalog(root: Path) -> dict[str, list[dict[str, Any]]]:
     return normalized_catalog
 
 
+def _load_kind_library(root: Path, asset_kind: str) -> list[dict[str, Any]]:
+    cache_key = (root, asset_kind)
+    cached = _KIND_LIBRARY_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    relative_path = _KIND_LIBRARY_FILENAMES.get(asset_kind)
+    if relative_path is None:
+        _KIND_LIBRARY_CACHE[cache_key] = []
+        return []
+
+    library_path = root / relative_path
+    if not library_path.is_file():
+        _KIND_LIBRARY_CACHE[cache_key] = []
+        return []
+
+    try:
+        raw_payload = json.loads(library_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _KIND_LIBRARY_CACHE[cache_key] = []
+        return []
+
+    if isinstance(raw_payload, dict):
+        raw_entries = raw_payload.get("entries", [])
+    else:
+        raw_entries = raw_payload
+
+    if not isinstance(raw_entries, list):
+        _KIND_LIBRARY_CACHE[cache_key] = []
+        return []
+
+    entries = [entry for entry in raw_entries if isinstance(entry, dict)]
+    _KIND_LIBRARY_CACHE[cache_key] = entries
+    return entries
+
+
 def _as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -199,9 +300,22 @@ def _sanitize_asset_filename(asset_ref: str) -> str:
 
 
 def _normalize_text(value: str) -> str:
-    return " ".join(_tokenize(value))
+    return " ".join(sorted(_tokenize(value)))
 
 
 def _tokenize(value: str) -> set[str]:
     lowered = value.lower().replace(".png", " ").replace(".jpg", " ").replace(".webp", " ")
-    return {token for token in re.split(r"[^a-z0-9]+", lowered) if token}
+    tokens = {token for token in re.split(r"[^a-z0-9]+", lowered) if token}
+
+    for run in re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff]+", value):
+        cleaned = run.strip()
+        if not cleaned:
+            continue
+        tokens.add(cleaned)
+        for width in (2, 3):
+            if len(cleaned) < width:
+                continue
+            for index in range(len(cleaned) - width + 1):
+                tokens.add(cleaned[index : index + width])
+
+    return tokens

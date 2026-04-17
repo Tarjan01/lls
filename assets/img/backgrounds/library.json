@@ -1,0 +1,68 @@
+[
+  {
+    "id": "rainy_villa_hall",
+    "path": "backgrounds/rainy_villa_hall.png",
+    "aliases": ["default", "rainy_hall", "villa_hall", "manor_hall", "听涛阁大厅", "赵家别墅大厅", "豪宅大厅", "门厅", "走廊"],
+    "tags": ["default", "室内", "大厅", "别墅", "豪宅", "雨夜", "夜晚", "宅邸", "潜入", "准备阶段", "书房外", "会客区"]
+  },
+  {
+    "id": "mansion_study_room",
+    "path": "backgrounds/mansion_study_room.png",
+    "aliases": ["study_room", "villa_study", "library_room", "manor_study", "office_room", "听涛阁书房", "案发书房", "赵万山书房"],
+    "tags": ["室内", "书房", "办公室", "案发现场", "密室", "私人房间", "调查", "卷宗", "桌案", "vr房间"]
+  },
+  {
+    "id": "security_control_room",
+    "path": "backgrounds/security_control_room.png",
+    "aliases": ["control_room", "security_room", "monitor_room", "surveillance_room", "别墅监控室", "安保室", "控制室"],
+    "tags": ["室内", "监控", "控制室", "安保", "机房", "终端", "屏幕", "夜巡", "保安", "中控"]
+  },
+  {
+    "id": "rainy_villa_ending",
+    "path": "backgrounds/rainy_villa_ending.png",
+    "aliases": ["ending_hall", "finale_hall", "reveal_hall", "ending_room", "结局大厅", "收束场景"],
+    "tags": ["室内", "大厅", "结局", "收束", "揭示", "摊牌", "逃离前", "最终阶段", "雨夜"]
+  },
+  {
+    "id": "front_gallery",
+    "path": "backgrounds/front_gallery.png",
+    "aliases": ["gallery_lobby", "reception_gallery", "front_hall", "entry_gallery", "镜海馆前厅", "展馆前厅", "美术馆入口", "大厅接待区"],
+    "tags": ["室内", "前厅", "门厅", "接待", "入口", "大厅", "艺术馆", "美术馆", "镜海馆", "来宾区"]
+  },
+  {
+    "id": "gallery_inner_hall",
+    "path": "backgrounds/gallery_inner_hall.png",
+    "aliases": ["gallery_hall", "art_gallery", "exhibition_hall", "glass_gallery", "mirror_gallery", "镜海馆展厅", "中庭展区", "穹厅"],
+    "tags": ["室内", "展厅", "中庭", "展区", "展柜", "艺术馆", "美术馆", "玻璃", "镜海馆", "拍卖预展"]
+  },
+  {
+    "id": "gallery_surveillance_room",
+    "path": "backgrounds/gallery_surveillance_room.png",
+    "aliases": ["gallery_control_room", "gallery_security_room", "museum_monitor_room", "镜海馆监控室", "展馆中控室"],
+    "tags": ["室内", "监控", "控制室", "安保", "艺术馆", "美术馆", "镜海馆", "机房", "屏幕", "中控"]
+  },
+  {
+    "id": "villa_exterior",
+    "path": "backgrounds/villa_exterior.png",
+    "aliases": ["rainy_villa_exterior", "manor_exterior", "house_front", "estate_front", "听涛阁外景", "别墅门口", "赵家别墅外"],
+    "tags": ["户外", "外景", "别墅外", "门口", "庄园", "雨夜", "到达", "离开", "夜晚", "建筑外立面"]
+  },
+  {
+    "id": "estate_garden",
+    "path": "backgrounds/estate_garden.png",
+    "aliases": ["estate_ground", "garden", "courtyard", "outdoor", "villa_garden", "庭院", "花园", "院子"],
+    "tags": ["户外", "庭院", "花园", "草地", "院落", "庄园", "白天", "缓冲区", "散步路径"]
+  },
+  {
+    "id": "forest_edge",
+    "path": "backgrounds/forest_edge.png",
+    "aliases": ["forest", "woods", "mountain_forest", "tree_line", "林地边缘", "树林边缘"],
+    "tags": ["户外", "树林", "森林", "林地", "边缘", "郊外", "山林", "小路", "隐蔽区域"]
+  },
+  {
+    "id": "mountain_road",
+    "path": "backgrounds/mountain_road.png",
+    "aliases": ["cliff_path", "remote_road", "mountain_path", "escape_road", "山路", "盘山路", "逃离路线"],
+    "tags": ["户外", "山路", "公路", "道路", "离场", "逃跑", "撤离", "郊外", "远郊", "下山"]
+  }
+]
