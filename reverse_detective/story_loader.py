@@ -20,6 +20,8 @@ from reverse_detective.models import (
 
 DEFAULT_STORIES_DIR = Path("stories")
 BACKGROUND_FILE_NAME = "game_background.json"
+STORY_CONFIG_FILE_NAME = "story.json"
+STORY_CACHE_FILE_NAME = "cached_initial_scene.json"
 
 
 class StoryValidationError(ValueError):
@@ -35,9 +37,9 @@ def load_story_catalog(stories_dir: Path | None = None) -> tuple[StoryDefinition
 
     background = load_game_background(root / BACKGROUND_FILE_NAME)
     story_files = sorted(
-        path
-        for path in root.glob("*.json")
-        if path.is_file() and path.name != BACKGROUND_FILE_NAME
+        child / STORY_CONFIG_FILE_NAME
+        for child in root.iterdir()
+        if child.is_dir() and (child / STORY_CONFIG_FILE_NAME).is_file()
     )
     if not story_files:
         raise StoryValidationError(f"No story JSON files found in: {root}")
@@ -99,7 +101,8 @@ def load_story_definition(
         {"id", "title", "subtitle", "case", "roles", "scoring", "rankings"},
         str(path),
     )
-    game_background = background or load_game_background(path.parent / BACKGROUND_FILE_NAME)
+    story_root = path.parent.parent if path.name == STORY_CONFIG_FILE_NAME else path.parent
+    game_background = background or load_game_background(story_root / BACKGROUND_FILE_NAME)
 
     case_data = _require_mapping(payload["case"], f"{path}.case")
     _require_exact_keys(

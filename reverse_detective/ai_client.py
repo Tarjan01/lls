@@ -17,7 +17,12 @@ from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 from reverse_detective.models import ActionRecord, SceneState, StoryPremise
 from reverse_detective.scene_loader import load_scene_payload, scene_to_dict
-from reverse_detective.story_loader import build_story_premise, load_story_catalog
+from reverse_detective.story_loader import (
+    DEFAULT_STORIES_DIR,
+    STORY_CACHE_FILE_NAME,
+    build_story_premise,
+    load_story_catalog,
+)
 
 
 PROMPT_SCHEMA = {
@@ -108,6 +113,7 @@ class ReverseDetectiveAIClient:
         self._live_enabled = bool(config.base_url and config.model and self._api_key)
         self._last_mode_label = "Live API" if self._live_enabled else "Mock Story"
         self._initial_scene_cache_root = (cache_root or DEFAULT_INITIAL_SCENE_CACHE_ROOT).expanduser()
+        self._story_local_cache_enabled = cache_root is None
         self._prefetch_lock = threading.Lock()
         self._prefetch_inflight: set[str] = set()
         self._live_request_lock = threading.Lock()
@@ -144,6 +150,12 @@ class ReverseDetectiveAIClient:
         return scene
 
     def load_cached_initial_scene(self, premise: StoryPremise) -> SceneState | None:
+        local_payload = self._read_local_story_cache_entry(premise)
+        if local_payload is not None:
+            scene = self._load_scene_from_cache_payload(local_payload)
+            if scene is not None:
+                return scene
+
         cache_path = self._initial_scene_cache_path(premise)
         if not cache_path.exists():
             return None
@@ -153,24 +165,7 @@ class ReverseDetectiveAIClient:
         except (OSError, json.JSONDecodeError):
             return None
 
-        if not isinstance(payload, dict):
-            return None
-
-        scene_payload = payload.get("scene")
-        if not isinstance(scene_payload, dict):
-            return None
-
-        try:
-            scene = load_scene_payload(scene_payload)
-        except Exception:
-            return None
-
-        source_label = payload.get("source_mode")
-        if isinstance(source_label, str) and source_label.strip():
-            self._last_mode_label = source_label.strip()
-        else:
-            self._last_mode_label = "Cached Live API" if self._live_enabled else "Cached Mock Story"
-        return scene
+        return self._load_scene_from_cache_payload(payload)
 
     def prefetch_initial_scene(self, premise: StoryPremise, *, force: bool = False) -> bool:
         cache_key = self._initial_scene_cache_key(premise)
@@ -180,7 +175,7 @@ class ReverseDetectiveAIClient:
                 return False
             if cache_key in self._prefetch_inflight:
                 return False
-            if cache_path.exists() and not force:
+            if (cache_path.exists() or self._read_local_story_cache_entry(premise) is not None) and not force:
                 return False
             self._prefetch_inflight.add(cache_key)
 
@@ -824,8 +819,16 @@ class ReverseDetectiveAIClient:
         return self._initial_scene_cache_root / f"{self._initial_scene_cache_key(premise)}.json"
 
     def _write_initial_scene_cache(self, premise: StoryPremise, scene: SceneState) -> None:
-        cache_path = self._initial_scene_cache_path(premise)
-        payload = {
+        payload = self._build_initial_scene_cache_payload(premise, scene)
+        self._write_runtime_initial_scene_cache(premise, payload)
+        self._write_local_story_cache(premise, payload)
+
+    def _build_initial_scene_cache_payload(
+        self,
+        premise: StoryPremise,
+        scene: SceneState,
+    ) -> dict[str, Any]:
+        return {
             "cache_version": INITIAL_SCENE_CACHE_VERSION,
             "story_id": premise.story_id,
             "role_id": premise.player_role_id,
@@ -833,6 +836,13 @@ class ReverseDetectiveAIClient:
             "source_mode": "Cached Live API" if self._live_enabled else "Cached Mock Story",
             "scene": scene_to_dict(scene),
         }
+
+    def _write_runtime_initial_scene_cache(
+        self,
+        premise: StoryPremise,
+        payload: dict[str, Any],
+    ) -> None:
+        cache_path = self._initial_scene_cache_path(premise)
         try:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_text(
@@ -841,6 +851,88 @@ class ReverseDetectiveAIClient:
             )
         except OSError:
             return
+
+    def _local_story_cache_path(self, premise: StoryPremise) -> Path:
+        return DEFAULT_STORIES_DIR / premise.story_id / STORY_CACHE_FILE_NAME
+
+    def _read_local_story_cache_entry(self, premise: StoryPremise) -> dict[str, Any] | None:
+        if not self._story_local_cache_enabled:
+            return None
+
+        cache_path = self._local_story_cache_path(premise)
+        if not cache_path.exists():
+            return None
+
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        entries = payload.get("entries")
+        if isinstance(entries, dict):
+            entry = entries.get(premise.player_role_id)
+            if isinstance(entry, dict):
+                return entry
+
+        if payload.get("role_id") == premise.player_role_id and isinstance(payload.get("scene"), dict):
+            return payload
+        return None
+
+    def _write_local_story_cache(self, premise: StoryPremise, payload: dict[str, Any]) -> None:
+        if not self._story_local_cache_enabled:
+            return
+
+        cache_path = self._local_story_cache_path(premise)
+        existing_entries: dict[str, Any] = {}
+        if cache_path.exists():
+            try:
+                existing_payload = json.loads(cache_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                existing_payload = {}
+            if isinstance(existing_payload, dict) and isinstance(existing_payload.get("entries"), dict):
+                existing_entries = {
+                    key: value
+                    for key, value in existing_payload["entries"].items()
+                    if isinstance(key, str) and isinstance(value, dict)
+                }
+
+        existing_entries[premise.player_role_id] = payload
+        file_payload = {
+            "cache_version": INITIAL_SCENE_CACHE_VERSION,
+            "story_id": premise.story_id,
+            "entries": existing_entries,
+        }
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps(file_payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            return
+
+    def _load_scene_from_cache_payload(self, payload: Any) -> SceneState | None:
+        if not isinstance(payload, dict):
+            return None
+
+        scene_payload = payload.get("scene")
+        if not isinstance(scene_payload, dict):
+            return None
+
+        try:
+            scene = load_scene_payload(scene_payload)
+        except Exception:
+            return None
+
+        source_label = payload.get("source_mode")
+        if isinstance(source_label, str) and source_label.strip():
+            self._last_mode_label = source_label.strip()
+        else:
+            self._last_mode_label = "Cached Live API" if self._live_enabled else "Cached Mock Story"
+        return scene
 
 
 def build_default_premise() -> StoryPremise:

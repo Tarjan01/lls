@@ -1,0 +1,1638 @@
+{
+  "cache_version": 1,
+  "story_id": "glass_gallery_closing_night",
+  "entries": {
+    "chief_caretaker": {
+      "cache_version": 1,
+      "story_id": "glass_gallery_closing_night",
+      "role_id": "chief_caretaker",
+      "model": "mock-story-cache",
+      "source_mode": "Cached Mock Story",
+      "scene": {
+        "scene": {
+          "background_image": "rainy_villa_hall.png",
+          "bgm": "tense_loop.mp3",
+          "description": "玻璃美术馆闭馆夜 · 当前行动阶段"
+        },
+        "npcs": [
+          {
+            "id": "victim",
+            "name": "傅承泽",
+            "image": "victim.png",
+            "position": [
+              1058,
+              394
+            ],
+            "patrol": null
+          },
+          {
+            "id": "detective",
+            "name": "沈策",
+            "image": "detective.png",
+            "position": [
+              214,
+              308
+            ],
+            "patrol": [
+              [
+                180,
+                296
+              ],
+              [
+                286,
+                320
+              ],
+              [
+                240,
+                358
+              ]
+            ]
+          },
+          {
+            "id": "witness",
+            "name": "旁观者",
+            "image": "witness.png",
+            "position": [
+              648,
+              214
+            ],
+            "patrol": [
+              [
+                612,
+                206
+              ],
+              [
+                708,
+                224
+              ]
+            ]
+          }
+        ],
+        "interactables": [
+          {
+            "id": "case_clue",
+            "name": "卷宗夹",
+            "image": "case_file.png",
+            "position": [
+              196,
+              430
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查线索",
+                "action_id": "inspect_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你翻开卷宗，确认了关键时间差。",
+                  "failure_text": "你已经把卷宗里的关键页记住了。"
+                }
+              },
+              {
+                "label": "暂时略过",
+                "action_id": "ignore_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定先不碰卷宗，把注意力留给更紧迫的布置。",
+                  "failure_text": "你已经做出了暂缓处理卷宗的决定。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "witness_route",
+            "name": "走廊动线",
+            "image": "corridor_watch.png",
+            "position": [
+              394,
+              196
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "观察证人动线",
+                "action_id": "read_witness_route",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你记住了旁观者在走廊上的折返节奏，盲区真正出现的时机终于清晰了。",
+                  "failure_text": "你已经摸清了这条走廊上的往返规律。"
+                }
+              },
+              {
+                "label": "提前布置不在场证明",
+                "action_id": "stage_alibi",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你决定先把自己放进无辜者的位置，再看这套说辞是否经得起追问。",
+                  "failure_text": "先摸清证人的动线，再决定如何利用这段空档。"
+                }
+              },
+              {
+                "label": "诱导证人离开盲区",
+                "action_id": "lure_witness",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你开始引导证人的注意力偏离真正的盲区，准备赌一次节奏失衡。",
+                  "failure_text": "你还没掌握证人的出入节奏，贸然引导只会让自己暴露。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "primary_tool",
+            "name": "恒温香雾",
+            "image": "tool_case.png",
+            "position": [
+              634,
+              356
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "解开工具包",
+                "action_id": "unlock_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "你悄悄解开了工具包的锁扣。",
+                  "failure_text": "工具包已经打开过了。"
+                }
+              },
+              {
+                "label": "布置主要手段",
+                "action_id": "prepare_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "opened": true,
+                    "disabled": true
+                  },
+                  "success_text": "你已经把主要手段安置到位。",
+                  "failure_text": "现在还没法正式布置主手段。"
+                }
+              },
+              {
+                "label": "先不处理",
+                "action_id": "skip_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你暂时压住了动手冲动，决定把风险留到更合适的时机。",
+                  "failure_text": "你已经选择继续按兵不动。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "support_tool",
+            "name": "馆务控制板",
+            "image": "support_kit.png",
+            "position": [
+              1110,
+              266
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "打开掩护包",
+                "action_id": "open_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你把掩护工具摊开，开始核对细节。",
+                  "failure_text": "当前条件不足，暂时无法执行“打开掩护包”。"
+                }
+              },
+              {
+                "label": "准备掩护",
+                "action_id": "prepare_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "辅助掩护已经准备完成。",
+                  "failure_text": "先打开掩护包再安排掩护。"
+                }
+              },
+              {
+                "label": "维持现状",
+                "action_id": "skip_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定暂不动用这组掩护，把它留作更靠后的保险。",
+                  "failure_text": "这组掩护目前仍被你原样保留。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "study_door",
+            "name": "书房门",
+            "image": "locked_door.png",
+            "position": [
+              836,
+              210
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查门锁",
+                "action_id": "inspect_lock",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你重新确认了门锁结构和开合声，心里对进门时机更有把握。",
+                  "failure_text": "你刚刚已经仔细确认过这把门锁了。"
+                }
+              },
+              {
+                "label": "撬开门锁",
+                "action_id": "unlock_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "门锁轻轻弹开了一格。",
+                  "failure_text": "这扇门现在不需要再撬。"
+                }
+              },
+              {
+                "label": "推开房门",
+                "action_id": "open_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你推开书房门，里面比想象中更安静。",
+                  "failure_text": "先解开门锁，或者这扇门已经开了。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "target_window",
+            "name": "视线盲区",
+            "image": "window.png",
+            "position": [
+              1006,
+              404
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "继续观察",
+                "action_id": "wait",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你继续压低存在感，记录每个人的站位和下一次错身的时间点。",
+                  "failure_text": "你已经把这一轮站位变化看得足够清楚了。"
+                }
+              },
+              {
+                "label": "执行完美方案",
+                "action_id": "execute_clean",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定按原计划进入最稳的一条线，接下来只看局势会不会如你预估般收束。",
+                  "failure_text": "现在还不是推出完美方案的时机。"
+                }
+              },
+              {
+                "label": "冒险提前动手",
+                "action_id": "execute_risky",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定抢在所有准备彻底到位前动手，把结果押在一个更窄的窗口上。",
+                  "failure_text": "此刻贸然推进只会让风险比你能承受的更高。"
+                }
+              }
+            ]
+          }
+        ],
+        "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
+        "game_status": "ongoing",
+        "ending_text": null
+      }
+    },
+    "auction_rival": {
+      "cache_version": 1,
+      "story_id": "glass_gallery_closing_night",
+      "role_id": "auction_rival",
+      "model": "mock-story-cache",
+      "source_mode": "Cached Mock Story",
+      "scene": {
+        "scene": {
+          "background_image": "rainy_villa_hall.png",
+          "bgm": "tense_loop.mp3",
+          "description": "玻璃美术馆闭馆夜 · 当前行动阶段"
+        },
+        "npcs": [
+          {
+            "id": "victim",
+            "name": "傅承泽",
+            "image": "victim.png",
+            "position": [
+              1058,
+              394
+            ],
+            "patrol": null
+          },
+          {
+            "id": "detective",
+            "name": "沈策",
+            "image": "detective.png",
+            "position": [
+              214,
+              308
+            ],
+            "patrol": [
+              [
+                180,
+                296
+              ],
+              [
+                286,
+                320
+              ],
+              [
+                240,
+                358
+              ]
+            ]
+          },
+          {
+            "id": "witness",
+            "name": "旁观者",
+            "image": "witness.png",
+            "position": [
+              648,
+              214
+            ],
+            "patrol": [
+              [
+                612,
+                206
+              ],
+              [
+                708,
+                224
+              ]
+            ]
+          }
+        ],
+        "interactables": [
+          {
+            "id": "case_clue",
+            "name": "卷宗夹",
+            "image": "case_file.png",
+            "position": [
+              196,
+              430
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查线索",
+                "action_id": "inspect_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你翻开卷宗，确认了关键时间差。",
+                  "failure_text": "你已经把卷宗里的关键页记住了。"
+                }
+              },
+              {
+                "label": "暂时略过",
+                "action_id": "ignore_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定先不碰卷宗，把注意力留给更紧迫的布置。",
+                  "failure_text": "你已经做出了暂缓处理卷宗的决定。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "witness_route",
+            "name": "走廊动线",
+            "image": "corridor_watch.png",
+            "position": [
+              394,
+              196
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "观察证人动线",
+                "action_id": "read_witness_route",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你记住了旁观者在走廊上的折返节奏，盲区真正出现的时机终于清晰了。",
+                  "failure_text": "你已经摸清了这条走廊上的往返规律。"
+                }
+              },
+              {
+                "label": "提前布置不在场证明",
+                "action_id": "stage_alibi",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你决定先把自己放进无辜者的位置，再看这套说辞是否经得起追问。",
+                  "failure_text": "先摸清证人的动线，再决定如何利用这段空档。"
+                }
+              },
+              {
+                "label": "诱导证人离开盲区",
+                "action_id": "lure_witness",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你开始引导证人的注意力偏离真正的盲区，准备赌一次节奏失衡。",
+                  "failure_text": "你还没掌握证人的出入节奏，贸然引导只会让自己暴露。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "primary_tool",
+            "name": "潮汐脚本",
+            "image": "tool_case.png",
+            "position": [
+              634,
+              356
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "解开工具包",
+                "action_id": "unlock_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "你悄悄解开了工具包的锁扣。",
+                  "failure_text": "工具包已经打开过了。"
+                }
+              },
+              {
+                "label": "布置主要手段",
+                "action_id": "prepare_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "opened": true,
+                    "disabled": true
+                  },
+                  "success_text": "你已经把主要手段安置到位。",
+                  "failure_text": "现在还没法正式布置主手段。"
+                }
+              },
+              {
+                "label": "先不处理",
+                "action_id": "skip_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你暂时压住了动手冲动，决定把风险留到更合适的时机。",
+                  "failure_text": "你已经选择继续按兵不动。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "support_tool",
+            "name": "口袋中继器",
+            "image": "support_kit.png",
+            "position": [
+              1110,
+              266
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "打开掩护包",
+                "action_id": "open_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你把掩护工具摊开，开始核对细节。",
+                  "failure_text": "当前条件不足，暂时无法执行“打开掩护包”。"
+                }
+              },
+              {
+                "label": "准备掩护",
+                "action_id": "prepare_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "辅助掩护已经准备完成。",
+                  "failure_text": "先打开掩护包再安排掩护。"
+                }
+              },
+              {
+                "label": "维持现状",
+                "action_id": "skip_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定暂不动用这组掩护，把它留作更靠后的保险。",
+                  "failure_text": "这组掩护目前仍被你原样保留。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "study_door",
+            "name": "书房门",
+            "image": "locked_door.png",
+            "position": [
+              836,
+              210
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查门锁",
+                "action_id": "inspect_lock",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你重新确认了门锁结构和开合声，心里对进门时机更有把握。",
+                  "failure_text": "你刚刚已经仔细确认过这把门锁了。"
+                }
+              },
+              {
+                "label": "撬开门锁",
+                "action_id": "unlock_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "门锁轻轻弹开了一格。",
+                  "failure_text": "这扇门现在不需要再撬。"
+                }
+              },
+              {
+                "label": "推开房门",
+                "action_id": "open_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你推开书房门，里面比想象中更安静。",
+                  "failure_text": "先解开门锁，或者这扇门已经开了。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "target_window",
+            "name": "视线盲区",
+            "image": "window.png",
+            "position": [
+              1006,
+              404
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "继续观察",
+                "action_id": "wait",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你继续压低存在感，记录每个人的站位和下一次错身的时间点。",
+                  "failure_text": "你已经把这一轮站位变化看得足够清楚了。"
+                }
+              },
+              {
+                "label": "执行完美方案",
+                "action_id": "execute_clean",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定按原计划进入最稳的一条线，接下来只看局势会不会如你预估般收束。",
+                  "failure_text": "现在还不是推出完美方案的时机。"
+                }
+              },
+              {
+                "label": "冒险提前动手",
+                "action_id": "execute_risky",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定抢在所有准备彻底到位前动手，把结果押在一个更窄的窗口上。",
+                  "failure_text": "此刻贸然推进只会让风险比你能承受的更高。"
+                }
+              }
+            ]
+          }
+        ],
+        "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
+        "game_status": "ongoing",
+        "ending_text": null
+      }
+    },
+    "restoration_teacher": {
+      "cache_version": 1,
+      "story_id": "glass_gallery_closing_night",
+      "role_id": "restoration_teacher",
+      "model": "mock-story-cache",
+      "source_mode": "Cached Mock Story",
+      "scene": {
+        "scene": {
+          "background_image": "rainy_villa_hall.png",
+          "bgm": "tense_loop.mp3",
+          "description": "玻璃美术馆闭馆夜 · 当前行动阶段"
+        },
+        "npcs": [
+          {
+            "id": "victim",
+            "name": "傅承泽",
+            "image": "victim.png",
+            "position": [
+              1058,
+              394
+            ],
+            "patrol": null
+          },
+          {
+            "id": "detective",
+            "name": "沈策",
+            "image": "detective.png",
+            "position": [
+              214,
+              308
+            ],
+            "patrol": [
+              [
+                180,
+                296
+              ],
+              [
+                286,
+                320
+              ],
+              [
+                240,
+                358
+              ]
+            ]
+          },
+          {
+            "id": "witness",
+            "name": "旁观者",
+            "image": "witness.png",
+            "position": [
+              648,
+              214
+            ],
+            "patrol": [
+              [
+                612,
+                206
+              ],
+              [
+                708,
+                224
+              ]
+            ]
+          }
+        ],
+        "interactables": [
+          {
+            "id": "case_clue",
+            "name": "卷宗夹",
+            "image": "case_file.png",
+            "position": [
+              196,
+              430
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查线索",
+                "action_id": "inspect_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你翻开卷宗，确认了关键时间差。",
+                  "failure_text": "你已经把卷宗里的关键页记住了。"
+                }
+              },
+              {
+                "label": "暂时略过",
+                "action_id": "ignore_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定先不碰卷宗，把注意力留给更紧迫的布置。",
+                  "failure_text": "你已经做出了暂缓处理卷宗的决定。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "witness_route",
+            "name": "走廊动线",
+            "image": "corridor_watch.png",
+            "position": [
+              394,
+              196
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "观察证人动线",
+                "action_id": "read_witness_route",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你记住了旁观者在走廊上的折返节奏，盲区真正出现的时机终于清晰了。",
+                  "failure_text": "你已经摸清了这条走廊上的往返规律。"
+                }
+              },
+              {
+                "label": "提前布置不在场证明",
+                "action_id": "stage_alibi",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你决定先把自己放进无辜者的位置，再看这套说辞是否经得起追问。",
+                  "failure_text": "先摸清证人的动线，再决定如何利用这段空档。"
+                }
+              },
+              {
+                "label": "诱导证人离开盲区",
+                "action_id": "lure_witness",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你开始引导证人的注意力偏离真正的盲区，准备赌一次节奏失衡。",
+                  "failure_text": "你还没掌握证人的出入节奏，贸然引导只会让自己暴露。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "primary_tool",
+            "name": "挥发性定色剂",
+            "image": "tool_case.png",
+            "position": [
+              634,
+              356
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "解开工具包",
+                "action_id": "unlock_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "你悄悄解开了工具包的锁扣。",
+                  "failure_text": "工具包已经打开过了。"
+                }
+              },
+              {
+                "label": "布置主要手段",
+                "action_id": "prepare_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "opened": true,
+                    "disabled": true
+                  },
+                  "success_text": "你已经把主要手段安置到位。",
+                  "failure_text": "现在还没法正式布置主手段。"
+                }
+              },
+              {
+                "label": "先不处理",
+                "action_id": "skip_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你暂时压住了动手冲动，决定把风险留到更合适的时机。",
+                  "failure_text": "你已经选择继续按兵不动。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "support_tool",
+            "name": "替换喷瓶",
+            "image": "support_kit.png",
+            "position": [
+              1110,
+              266
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "打开掩护包",
+                "action_id": "open_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你把掩护工具摊开，开始核对细节。",
+                  "failure_text": "当前条件不足，暂时无法执行“打开掩护包”。"
+                }
+              },
+              {
+                "label": "准备掩护",
+                "action_id": "prepare_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "辅助掩护已经准备完成。",
+                  "failure_text": "先打开掩护包再安排掩护。"
+                }
+              },
+              {
+                "label": "维持现状",
+                "action_id": "skip_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定暂不动用这组掩护，把它留作更靠后的保险。",
+                  "failure_text": "这组掩护目前仍被你原样保留。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "study_door",
+            "name": "书房门",
+            "image": "locked_door.png",
+            "position": [
+              836,
+              210
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查门锁",
+                "action_id": "inspect_lock",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你重新确认了门锁结构和开合声，心里对进门时机更有把握。",
+                  "failure_text": "你刚刚已经仔细确认过这把门锁了。"
+                }
+              },
+              {
+                "label": "撬开门锁",
+                "action_id": "unlock_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "门锁轻轻弹开了一格。",
+                  "failure_text": "这扇门现在不需要再撬。"
+                }
+              },
+              {
+                "label": "推开房门",
+                "action_id": "open_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你推开书房门，里面比想象中更安静。",
+                  "failure_text": "先解开门锁，或者这扇门已经开了。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "target_window",
+            "name": "视线盲区",
+            "image": "window.png",
+            "position": [
+              1006,
+              404
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "继续观察",
+                "action_id": "wait",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你继续压低存在感，记录每个人的站位和下一次错身的时间点。",
+                  "failure_text": "你已经把这一轮站位变化看得足够清楚了。"
+                }
+              },
+              {
+                "label": "执行完美方案",
+                "action_id": "execute_clean",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定按原计划进入最稳的一条线，接下来只看局势会不会如你预估般收束。",
+                  "failure_text": "现在还不是推出完美方案的时机。"
+                }
+              },
+              {
+                "label": "冒险提前动手",
+                "action_id": "execute_risky",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定抢在所有准备彻底到位前动手，把结果押在一个更窄的窗口上。",
+                  "failure_text": "此刻贸然推进只会让风险比你能承受的更高。"
+                }
+              }
+            ]
+          }
+        ],
+        "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
+        "game_status": "ongoing",
+        "ending_text": null
+      }
+    },
+    "private_doctor": {
+      "cache_version": 1,
+      "story_id": "glass_gallery_closing_night",
+      "role_id": "private_doctor",
+      "model": "mock-story-cache",
+      "source_mode": "Cached Mock Story",
+      "scene": {
+        "scene": {
+          "background_image": "rainy_villa_hall.png",
+          "bgm": "tense_loop.mp3",
+          "description": "玻璃美术馆闭馆夜 · 当前行动阶段"
+        },
+        "npcs": [
+          {
+            "id": "victim",
+            "name": "傅承泽",
+            "image": "victim.png",
+            "position": [
+              1058,
+              394
+            ],
+            "patrol": null
+          },
+          {
+            "id": "detective",
+            "name": "沈策",
+            "image": "detective.png",
+            "position": [
+              214,
+              308
+            ],
+            "patrol": [
+              [
+                180,
+                296
+              ],
+              [
+                286,
+                320
+              ],
+              [
+                240,
+                358
+              ]
+            ]
+          },
+          {
+            "id": "witness",
+            "name": "旁观者",
+            "image": "witness.png",
+            "position": [
+              648,
+              214
+            ],
+            "patrol": [
+              [
+                612,
+                206
+              ],
+              [
+                708,
+                224
+              ]
+            ]
+          }
+        ],
+        "interactables": [
+          {
+            "id": "case_clue",
+            "name": "卷宗夹",
+            "image": "case_file.png",
+            "position": [
+              196,
+              430
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查线索",
+                "action_id": "inspect_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你翻开卷宗，确认了关键时间差。",
+                  "failure_text": "你已经把卷宗里的关键页记住了。"
+                }
+              },
+              {
+                "label": "暂时略过",
+                "action_id": "ignore_clue",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定先不碰卷宗，把注意力留给更紧迫的布置。",
+                  "failure_text": "你已经做出了暂缓处理卷宗的决定。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "witness_route",
+            "name": "走廊动线",
+            "image": "corridor_watch.png",
+            "position": [
+              394,
+              196
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "观察证人动线",
+                "action_id": "read_witness_route",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你记住了旁观者在走廊上的折返节奏，盲区真正出现的时机终于清晰了。",
+                  "failure_text": "你已经摸清了这条走廊上的往返规律。"
+                }
+              },
+              {
+                "label": "提前布置不在场证明",
+                "action_id": "stage_alibi",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你决定先把自己放进无辜者的位置，再看这套说辞是否经得起追问。",
+                  "failure_text": "先摸清证人的动线，再决定如何利用这段空档。"
+                }
+              },
+              {
+                "label": "诱导证人离开盲区",
+                "action_id": "lure_witness",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "你开始引导证人的注意力偏离真正的盲区，准备赌一次节奏失衡。",
+                  "failure_text": "你还没掌握证人的出入节奏，贸然引导只会让自己暴露。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "primary_tool",
+            "name": "诱发性镇静针",
+            "image": "tool_case.png",
+            "position": [
+              634,
+              356
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "解开工具包",
+                "action_id": "unlock_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "你悄悄解开了工具包的锁扣。",
+                  "failure_text": "工具包已经打开过了。"
+                }
+              },
+              {
+                "label": "布置主要手段",
+                "action_id": "prepare_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "opened": true,
+                    "disabled": true
+                  },
+                  "success_text": "你已经把主要手段安置到位。",
+                  "failure_text": "现在还没法正式布置主手段。"
+                }
+              },
+              {
+                "label": "先不处理",
+                "action_id": "skip_tool",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你暂时压住了动手冲动，决定把风险留到更合适的时机。",
+                  "failure_text": "你已经选择继续按兵不动。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "support_tool",
+            "name": "脉冲诊疗笔",
+            "image": "support_kit.png",
+            "position": [
+              1110,
+              266
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "打开掩护包",
+                "action_id": "open_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你把掩护工具摊开，开始核对细节。",
+                  "failure_text": "当前条件不足，暂时无法执行“打开掩护包”。"
+                }
+              },
+              {
+                "label": "准备掩护",
+                "action_id": "prepare_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "opened": true,
+                    "disabled": false
+                  },
+                  "set_state": {
+                    "disabled": true
+                  },
+                  "success_text": "辅助掩护已经准备完成。",
+                  "failure_text": "先打开掩护包再安排掩护。"
+                }
+              },
+              {
+                "label": "维持现状",
+                "action_id": "skip_support",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定暂不动用这组掩护，把它留作更靠后的保险。",
+                  "failure_text": "这组掩护目前仍被你原样保留。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "study_door",
+            "name": "书房门",
+            "image": "locked_door.png",
+            "position": [
+              836,
+              210
+            ],
+            "state": {
+              "opened": false,
+              "locked": true,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "检查门锁",
+                "action_id": "inspect_lock",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你重新确认了门锁结构和开合声，心里对进门时机更有把握。",
+                  "failure_text": "你刚刚已经仔细确认过这把门锁了。"
+                }
+              },
+              {
+                "label": "撬开门锁",
+                "action_id": "unlock_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": true
+                  },
+                  "set_state": {
+                    "locked": false
+                  },
+                  "success_text": "门锁轻轻弹开了一格。",
+                  "failure_text": "这扇门现在不需要再撬。"
+                }
+              },
+              {
+                "label": "推开房门",
+                "action_id": "open_door",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {
+                    "locked": false,
+                    "opened": false
+                  },
+                  "set_state": {
+                    "opened": true
+                  },
+                  "success_text": "你推开书房门，里面比想象中更安静。",
+                  "failure_text": "先解开门锁，或者这扇门已经开了。"
+                }
+              }
+            ]
+          },
+          {
+            "id": "target_window",
+            "name": "视线盲区",
+            "image": "window.png",
+            "position": [
+              1006,
+              404
+            ],
+            "state": {
+              "opened": false,
+              "locked": false,
+              "hidden": false,
+              "disabled": false
+            },
+            "options": [
+              {
+                "label": "继续观察",
+                "action_id": "wait",
+                "resolution_mode": "local_rule",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你继续压低存在感，记录每个人的站位和下一次错身的时间点。",
+                  "failure_text": "你已经把这一轮站位变化看得足够清楚了。"
+                }
+              },
+              {
+                "label": "执行完美方案",
+                "action_id": "execute_clean",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定按原计划进入最稳的一条线，接下来只看局势会不会如你预估般收束。",
+                  "failure_text": "现在还不是推出完美方案的时机。"
+                }
+              },
+              {
+                "label": "冒险提前动手",
+                "action_id": "execute_risky",
+                "resolution_mode": "immediate_ai",
+                "local_logic": {
+                  "requires_state": {},
+                  "set_state": {},
+                  "success_text": "你决定抢在所有准备彻底到位前动手，把结果押在一个更窄的窗口上。",
+                  "failure_text": "此刻贸然推进只会让风险比你能承受的更高。"
+                }
+              }
+            ]
+          }
+        ],
+        "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
+        "game_status": "ongoing",
+        "ending_text": null
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import threading
 import time
@@ -560,3 +561,54 @@ def test_initial_scene_cache_roundtrip_loads_saved_scene(tmp_path: Path) -> None
     assert cached_scene is not None
     assert cached_scene.scene.description == scene.scene.description
     assert client.mode_label.startswith("Cached")
+
+
+def test_local_story_cache_file_is_used_when_available(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    story_root = tmp_path / "stories"
+    story_dir = story_root / "tingtaoge_last_night"
+    story_dir.mkdir(parents=True)
+    cache_file = story_dir / "cached_initial_scene.json"
+    cache_file.write_text(
+        json.dumps(
+            {
+                "cache_version": 1,
+                "story_id": "tingtaoge_last_night",
+                "entries": {
+                    "old_chen": {
+                        "cache_version": 1,
+                        "story_id": "tingtaoge_last_night",
+                        "role_id": "old_chen",
+                        "model": "mock-story-cache",
+                        "source_mode": "Cached Mock Story",
+                        "scene": {
+                            "scene": {
+                                "background_image": "bg.png",
+                                "bgm": "bgm.mp3",
+                                "description": "本地首包",
+                            },
+                            "npcs": [],
+                            "interactables": [],
+                            "narrative": "这是目录内缓存的首包。",
+                            "game_status": "ongoing",
+                            "ending_text": None,
+                        },
+                    }
+                },
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("reverse_detective.ai_client.DEFAULT_STORIES_DIR", story_root)
+
+    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+
+    scene = client.load_cached_initial_scene(build_default_premise())
+
+    assert scene is not None
+    assert scene.scene.description == "本地首包"
+    assert client.mode_label == "Cached Mock Story"
