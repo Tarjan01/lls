@@ -48,7 +48,12 @@ class AudioController:
         self._play_music(cue, menu_kind)
 
     def sync_scene(self, scene: SceneState) -> None:
-        self._play_music(scene.scene.bgm, scene.scene.description, scene.narrative)
+        self._play_music(
+            scene.scene.bgm,
+            scene.scene.bgm_tension,
+            scene.scene.description,
+            scene.narrative,
+        )
 
     def play_effect(self, effect_ref: str | None, *hint_texts: str) -> None:
         if not self._enabled:

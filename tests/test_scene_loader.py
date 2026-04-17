@@ -78,6 +78,46 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
     assert scene_to_dict(scene)["game_status"] == "ongoing"
 
 
+def test_load_scene_payload_accepts_optional_bgm_tension() -> None:
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "scene_villa_hall.png",
+                "bgm": "crime_suspense_high",
+                "description": "风声压得更低了。",
+                "bgm_tension": "high",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "现场正在变得更危险。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    assert scene.scene.bgm_tension == "high"
+    assert scene_to_dict(scene)["scene"]["bgm_tension"] == "high"
+
+
+def test_load_scene_payload_defaults_bgm_tension_to_medium() -> None:
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "scene_villa_hall.png",
+                "bgm": "crime_suspense_medium",
+                "description": "雨声压着天幕。",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "案件仍在推进。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    assert scene.scene.bgm_tension == "medium"
+
+
 def test_load_scene_payload_rejects_missing_required_keys() -> None:
     payload = {
         "scene": {

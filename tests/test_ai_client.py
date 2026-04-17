@@ -66,7 +66,14 @@ def test_mock_story_assigns_local_audio_cues(tmp_path: Path) -> None:
         if option.sfx is not None
     }
 
-    assert scene.scene.bgm in {"tense_loop", "investigation_calm", "ending_resolve"}
+    assert scene.scene.bgm in {
+        "crime_suspense_low",
+        "crime_suspense_medium",
+        "crime_suspense_high",
+        "crime_suspense_critical",
+        "ending_resolve",
+    }
+    assert scene.scene.bgm_tension in {"low", "medium", "high", "critical"}
     assert {"ui_confirm", "lock_open"} <= option_sfx
 
 

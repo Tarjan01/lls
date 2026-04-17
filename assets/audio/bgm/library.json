@@ -17,6 +17,38 @@
       "license": "CC0"
     },
     {
+      "id": "crime_suspense_low",
+      "path": "bgm/crime_suspense_low.wav",
+      "aliases": ["crime_suspense_low", "suspense_low", "low_tension", "mystery_low", "crime_low"],
+      "tags": ["crime", "suspense", "mystery", "low", "setup", "investigation", "noir", "悬疑", "低压"],
+      "source": "generated",
+      "license": "CC0"
+    },
+    {
+      "id": "crime_suspense_medium",
+      "path": "bgm/crime_suspense_medium.wav",
+      "aliases": ["crime_suspense_medium", "suspense_medium", "medium_tension", "risk_mid", "crime_medium"],
+      "tags": ["crime", "suspense", "medium", "pressure", "risk", "noir", "stealth", "悬疑", "中压"],
+      "source": "generated",
+      "license": "CC0"
+    },
+    {
+      "id": "crime_suspense_high",
+      "path": "bgm/crime_suspense_high.wav",
+      "aliases": ["crime_suspense_high", "suspense_high", "high_tension", "danger_high", "crime_high"],
+      "tags": ["crime", "suspense", "high", "danger", "alarm", "pressure", "noir", "悬疑", "高压"],
+      "source": "generated",
+      "license": "CC0"
+    },
+    {
+      "id": "crime_suspense_critical",
+      "path": "bgm/crime_suspense_critical.wav",
+      "aliases": ["crime_suspense_critical", "suspense_critical", "critical_tension", "critical", "crime_critical"],
+      "tags": ["crime", "suspense", "critical", "panic", "chase", "collapse", "noir", "悬疑", "极限"],
+      "source": "generated",
+      "license": "CC0"
+    },
+    {
       "id": "investigation_calm",
       "path": "bgm/investigation_calm.ogg",
       "aliases": ["investigation_calm", "calm_loop", "quiet_investigation", "briefing", "调查", "布置"],

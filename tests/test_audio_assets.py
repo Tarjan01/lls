@@ -15,6 +15,13 @@ def test_resolve_audio_path_matches_known_bgm_cue() -> None:
     assert resolved.name == "tense_loop.ogg"
 
 
+def test_resolve_audio_path_matches_suspense_bgm_cue() -> None:
+    resolved = resolve_audio_path("bgm", "crime_suspense_high", ASSET_ROOT)
+
+    assert resolved is not None
+    assert resolved.name == "crime_suspense_high.wav"
+
+
 def test_resolve_audio_path_matches_chinese_sound_hint() -> None:
     resolved = resolve_audio_path("sfx", "开锁", ASSET_ROOT, "unlock_door")
 

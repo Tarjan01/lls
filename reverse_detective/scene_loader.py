@@ -10,6 +10,7 @@ from reverse_detective.models import (
     ActionLocalLogic,
     ActionOption,
     ActionResolutionMode,
+    BgmTension,
     Interactable,
     InteractableState,
     NPC,
@@ -27,6 +28,7 @@ _INTERACTABLE_STATE_KEYS = {"opened", "locked", "hidden", "disabled"}
 _OPTION_KEYS = {"label", "action_id", "resolution_mode", "local_logic", "sfx"}
 _LOCAL_LOGIC_KEYS = {"requires_state", "set_state", "success_text", "failure_text"}
 _RESOLUTION_MODES: set[ActionResolutionMode] = {"local_rule", "immediate_ai"}
+_BGM_TENSIONS: set[BgmTension] = {"low", "medium", "high", "critical"}
 
 
 def load_scene_payload(payload: str | Mapping[str, Any]) -> SceneState:
@@ -50,7 +52,12 @@ def load_scene_payload(payload: str | Mapping[str, Any]) -> SceneState:
     )
 
     scene_data = _require_mapping(raw_payload["scene"], "scene")
-    _require_exact_keys(scene_data, {"background_image", "bgm", "description"}, "scene")
+    _require_allowed_keys(
+        scene_data,
+        {"background_image", "bgm", "description", "bgm_tension"},
+        "scene",
+    )
+    _require_required_keys(scene_data, {"background_image", "bgm", "description"}, "scene")
 
     npcs_raw = _require_sequence(raw_payload["npcs"], "npcs")
     interactables_raw = _require_sequence(raw_payload["interactables"], "interactables")
@@ -65,6 +72,10 @@ def load_scene_payload(payload: str | Mapping[str, Any]) -> SceneState:
             ),
             bgm=_require_non_empty_string(scene_data["bgm"], "scene.bgm"),
             description=_require_non_empty_string(scene_data["description"], "scene.description"),
+            bgm_tension=_require_bgm_tension(
+                scene_data.get("bgm_tension", "medium"),
+                "scene.bgm_tension",
+            ),
         ),
         npcs=tuple(_parse_npc(item, index) for index, item in enumerate(npcs_raw)),
         interactables=tuple(
@@ -84,6 +95,7 @@ def scene_to_dict(scene: SceneState) -> dict[str, Any]:
             "background_image": scene.scene.background_image,
             "bgm": scene.scene.bgm,
             "description": scene.scene.description,
+            "bgm_tension": scene.scene.bgm_tension,
         },
         "npcs": [
             {
@@ -333,6 +345,19 @@ def _require_game_status(value: Any, path: str) -> str:
             f"{path} must be one of {sorted(valid_statuses)!r}, got {status!r}."
         )
     return status
+
+
+def _require_bgm_tension(value: Any, path: str) -> BgmTension:
+    if not isinstance(value, str) or not value.strip():
+        raise SceneValidationError(
+            f"{path} must be one of {sorted(_BGM_TENSIONS)!r}."
+        )
+    tension = value.strip().lower()
+    if tension not in _BGM_TENSIONS:
+        raise SceneValidationError(
+            f"{path} must be one of {sorted(_BGM_TENSIONS)!r}, got {tension!r}."
+        )
+    return tension  # type: ignore[return-value]
 
 
 def _require_resolution_mode(value: Any, path: str) -> ActionResolutionMode:

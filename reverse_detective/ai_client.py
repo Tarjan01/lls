@@ -28,8 +28,9 @@ from reverse_detective.story_loader import (
 PROMPT_SCHEMA = {
     "scene": {
         "background_image": "mansion_study_room.png",
-        "bgm": "tense_loop",
+        "bgm": "crime_suspense_medium",
         "description": "string",
+        "bgm_tension": "medium",
     },
     "npcs": [
         {
@@ -75,8 +76,10 @@ PROMPT_SCHEMA = {
 
 SUPPORTED_BGM_CUES = (
     "menu_mystery",
-    "investigation_calm",
-    "tense_loop",
+    "crime_suspense_low",
+    "crime_suspense_medium",
+    "crime_suspense_high",
+    "crime_suspense_critical",
     "ending_resolve",
 )
 SUPPORTED_SFX_CUES = (
@@ -104,7 +107,12 @@ STREAM_DEADLINE_BUFFER_MULTIPLIER = 1.25
 
 @dataclass(frozen=True, slots=True)
 class AIRequestPayload:
-    request_type: Literal["initial_scene", "round_settlement", "forced_immediate_choice"]
+    request_type: Literal[
+        "initial_scene",
+        "round_settlement",
+        "forced_immediate_choice",
+        "freeform_action",
+    ]
     premise: StoryPremise
     current_scene: SceneState | None
     history: tuple[ActionRecord, ...]
@@ -216,7 +224,11 @@ class ReverseDetectiveAIClient:
         history: list[ActionRecord],
         recent_actions: list[ActionRecord],
         *,
-        request_type: Literal["round_settlement", "forced_immediate_choice"] = "round_settlement",
+        request_type: Literal[
+            "round_settlement",
+            "forced_immediate_choice",
+            "freeform_action",
+        ] = "round_settlement",
     ) -> SceneState:
         return self._generate_scene(
             AIRequestPayload(
@@ -465,6 +477,7 @@ class ReverseDetectiveAIClient:
             "Do not return markdown, explanations, or code fences. "
             "The client performs predictable local interactions locally and only asks you for the initial scene, "
             "or when the player chooses an option marked immediate_ai, "
+            "or when the player submits a freeform custom action outside the visible options, "
             "or when the player manually requests story progression because the current deterministic setup phase is exhausted. "
             "You must return the next settled scene after adjudicating the whole pending action batch. "
             "The JSON must match this schema exactly with no missing or extra root fields:\n"
@@ -495,10 +508,11 @@ class ReverseDetectiveAIClient:
             "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, locked_door.png, open_door.png, or window.png.\n"
             "24. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
             f"25. scene.bgm must be a local music cue id, not a filename or URL. Prefer one of {', '.join(SUPPORTED_BGM_CUES)}.\n"
-            f"26. options[].sfx should be null or a local sound cue id. Prefer one of {', '.join(SUPPORTED_SFX_CUES)}.\n"
-            "27. Use quieter cues for setup and investigation, and stronger cues for confrontation, alarm, escape, or decisive actions.\n"
-            "28. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
-            "29. All visible text content must be Simplified Chinese.\n"
+            "26. scene.bgm_tension must be one of low, medium, high, critical and should reflect suspense intensity.\n"
+            f"27. options[].sfx should be null or a local sound cue id. Prefer one of {', '.join(SUPPORTED_SFX_CUES)}.\n"
+            "28. This is a crime and suspense game. Avoid cheerful or relaxed in-game music. Prefer noir, suspense, stealth, pressure, and dread.\n"
+            "29. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
+            "30. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
@@ -508,6 +522,7 @@ class ReverseDetectiveAIClient:
                 "client_behavior": (
                     "The client applies predictable local_rule logic immediately on the current scene and stores those actions locally. "
                     "It calls the model only on initial scene generation, when the player selects an immediate_ai option, "
+                    "when the player submits a freeform custom action, "
                     "or when the player manually requests progression because the deterministic setup phase has run out of meaningful actions."
                 ),
                 "balancing_goal": (
@@ -546,10 +561,13 @@ class ReverseDetectiveAIClient:
             "audio_guidance": {
                 "bgm_cues": list(SUPPORTED_BGM_CUES),
                 "sfx_cues": list(SUPPORTED_SFX_CUES),
+                "suspense_scale": ["low", "medium", "high", "critical"],
                 "cue_rule": (
                     "Return cue ids only. Do not return remote audio URLs, base64, or binary data. "
-                    "Prefer calm investigative bgm for setup scenes, tense bgm for risky scenes, "
-                    "ending_resolve for terminal scenes, and short sfx ids on options when a local effect is obvious."
+                    "Return both scene.bgm and scene.bgm_tension. "
+                    "Keep menu music mysterious, keep in-game music suspenseful, and scale intensity from low to critical based on danger and time pressure. "
+                    "Avoid lighthearted or relaxed crime-scene music. "
+                    "Prefer ending_resolve only for terminal scenes, and short sfx ids on options when a local effect is obvious."
                 ),
             },
             "premise": _premise_to_dict(request.premise),
@@ -981,10 +999,14 @@ class _MockStoryEngine:
     def generate_scene(self, request: AIRequestPayload) -> SceneState:
         combined_history = [*request.history, *request.recent_actions]
         action_ids = {record.action_id for record in combined_history}
-        latest_action = combined_history[-1].action_id if combined_history else None
+        latest_record = combined_history[-1] if combined_history else None
+        latest_action = latest_record.action_id if latest_record is not None else None
 
         if request.current_scene is None:
             return load_scene_payload(self._initial_scene(request.premise))
+
+        if latest_action == "player_freeform_action":
+            return load_scene_payload(self._freeform_scene(request, latest_record))
 
         if latest_action == "execute_clean":
             if {"inspect_clue", "prepare_tool", "prepare_support"}.issubset(action_ids):
@@ -1104,6 +1126,8 @@ class _MockStoryEngine:
         scene_payload["scene"]["background_image"] = (
             "mansion_study_room.png" if inside_room else "rainy_villa_hall.png"
         )
+        scene_payload["scene"]["bgm"] = "crime_suspense_high" if inside_room else "crime_suspense_medium"
+        scene_payload["scene"]["bgm_tension"] = "high" if inside_room else "medium"
         scene_payload["scene"]["description"] = (
             f"{request.premise.story_title} · 书房内"
             if inside_room
@@ -1118,8 +1142,9 @@ class _MockStoryEngine:
         return {
             "scene": {
                 "background_image": "rainy_villa_hall.png",
-                "bgm": "tense_loop",
+                "bgm": "crime_suspense_medium",
                 "description": f"{premise.story_title} · 当前行动阶段",
+                "bgm_tension": "medium",
             },
             "npcs": [
                 {
@@ -1334,8 +1359,9 @@ class _MockStoryEngine:
         return {
             "scene": {
                 "background_image": "front_gallery.png",
-                "bgm": "investigation_calm",
+                "bgm": "crime_suspense_low",
                 "description": f"{premise.story_title} · 前厅假象",
+                "bgm_tension": "low",
             },
             "npcs": [
                 {
@@ -1424,6 +1450,7 @@ class _MockStoryEngine:
                 "background_image": "rainy_villa_ending.png",
                 "bgm": "ending_resolve",
                 "description": f"{premise.story_title} · 结局",
+                "bgm_tension": "critical" if game_status == "player_lose" else "high",
             },
             "npcs": [
                 {
@@ -1446,6 +1473,45 @@ class _MockStoryEngine:
             "game_status": game_status,
             "ending_text": ending_text,
         }
+
+    def _freeform_scene(self, request: AIRequestPayload, latest_record: ActionRecord | None) -> dict[str, Any]:
+        scene_payload = scene_to_dict(request.current_scene) if request.current_scene is not None else self._initial_scene(request.premise)
+        freeform_text = ""
+        if latest_record is not None and latest_record.freeform_text:
+            freeform_text = latest_record.freeform_text.strip()
+        lowered = freeform_text.lower()
+
+        if any(token in freeform_text for token in ("撤", "逃", "离开", "撤离", "脱身")):
+            return self._terminal_scene(
+                request.premise,
+                game_status="special_ending",
+                narrative=f"你临时提出了“{freeform_text}”的方案，并抓住了一次并不完美但足够脱身的窗口。",
+                ending_text="你提前结束了这场重演。虽然侦探仍保留疑点，但你至少没有被当场锁死在现场。",
+            )
+
+        if any(token in freeform_text for token in ("杀", "推下", "行凶", "下毒", "勒", "刺")):
+            prepared = {"prepare_tool", "prepare_support"} & {record.action_id for record in [*request.history, *request.recent_actions]}
+            status = "special_ending" if prepared else "player_lose"
+            return self._terminal_scene(
+                request.premise,
+                game_status=status,
+                narrative=f"你越过预设选项，直接尝试“{freeform_text}”。局面被瞬间推到了不可逆的阶段。",
+                ending_text=(
+                    "行动勉强被你压住了场面，但仍留下了很难彻底洗掉的疑点。"
+                    if status == "special_ending"
+                    else "你贸然推进决定性动作，侦探和现场反应都来得比你预想更快。"
+                ),
+            )
+
+        scene_payload["scene"]["bgm"] = "crime_suspense_high"
+        scene_payload["scene"]["bgm_tension"] = "high"
+        scene_payload["narrative"] = (
+            f"你尝试了自由行动“{freeform_text or '未命名行动'}”。"
+            "这一举动让现场关系立刻变得更紧绷，接下来的每个决定都更容易引发连锁反应。"
+        )
+        scene_payload["game_status"] = "ongoing"
+        scene_payload["ending_text"] = None
+        return scene_payload
 
     def _interactable(
         self,
@@ -1567,6 +1633,8 @@ def _history_record_to_dict(record: ActionRecord) -> dict[str, Any]:
         "label": record.label,
         "action_id": record.action_id,
         "resolution_mode": record.resolution_mode,
+        "source": record.source,
+        "freeform_text": record.freeform_text,
     }
 
 
