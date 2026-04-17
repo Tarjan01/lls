@@ -7,6 +7,7 @@ import pytest
 
 from reverse_detective.ai_client import build_default_premise
 from reverse_detective.game_state import GameSessionState
+from reverse_detective.models import NPC
 from reverse_detective.renderer import MenuRenderer, Renderer
 from reverse_detective.scene_loader import load_scene_payload
 from reverse_detective.utils.assets import ensure_asset_parent, resolve_cached_asset_path
@@ -276,6 +277,76 @@ def test_menu_renderer_reserves_left_strip_for_player_showcase(
         assert content_rect.left > showcase_rect.right
         assert showcase_rect.left == 24
         assert showcase_rect.width >= 160
+    finally:
+        pygame.quit()
+
+
+def test_renderer_prefers_character_assets_for_player(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    _write_asset_image(tmp_path / "character" / "1.png", (220, 44, 72), (64, 64))
+    _write_asset_image(tmp_path / "character" / "2.png", (44, 118, 228), (64, 64))
+    _write_asset_image(tmp_path / "npcs" / "menu_player_female.png", (22, 200, 110), (64, 64))
+    _write_asset_image(tmp_path / "npcs" / "menu_player_male.png", (210, 180, 18), (64, 64))
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+
+    try:
+        female_surface = renderer._load_player_surface("female", (48, 48), "player")
+        male_surface = renderer._load_player_surface("male", (48, 48), "player")
+
+        assert female_surface is not None
+        assert male_surface is not None
+        female_pixel = female_surface.get_at((12, 12))[:3]
+        male_pixel = male_surface.get_at((12, 12))[:3]
+        assert female_pixel[0] > female_pixel[1]
+        assert female_pixel[0] > female_pixel[2]
+        assert male_pixel[2] > male_pixel[0]
+        assert male_pixel[2] > male_pixel[1]
+    finally:
+        pygame.quit()
+
+
+def test_renderer_prefers_character_assets_for_npcs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    _write_asset_image(tmp_path / "character" / "4.png", (228, 92, 156), (64, 64))
+    _write_asset_image(tmp_path / "character" / "5.png", (236, 236, 236), (64, 64))
+    _write_asset_image(tmp_path / "npcs" / "npc.png", (24, 80, 200), (64, 64))
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+    doctor = NPC(id="doctor_zhang", name="张博士", image="npc.png", position=(100, 100), patrol=None)
+    female = NPC(id="su_man", name="苏曼", image="npc.png", position=(100, 100), patrol=None)
+
+    try:
+        doctor_surface = renderer._load_npc_surface(doctor, (48, 48))
+        female_surface = renderer._load_npc_surface(female, (48, 48))
+
+        assert doctor_surface is not None
+        assert female_surface is not None
+        doctor_pixel = doctor_surface.get_at((12, 12))[:3]
+        female_pixel = female_surface.get_at((12, 12))[:3]
+        assert min(doctor_pixel) > 180
+        assert female_pixel[0] > 180
+        assert female_pixel[2] > 120
     finally:
         pygame.quit()
 

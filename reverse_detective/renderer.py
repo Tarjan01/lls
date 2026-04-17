@@ -534,7 +534,7 @@ class Renderer(TooltipMixin):
         shadow_rect = pygame.Rect(x - 30, y + 58, 60, 18)
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
-        sprite = self._load_asset_surface("npc", npc.image, (132, 132), npc.id, npc.name)
+        sprite = self._load_npc_surface(npc, (132, 132))
         if sprite is not None:
             sprite_rect = sprite.get_rect(midbottom=(x, y + 42))
             self._surface.blit(sprite, sprite_rect)
@@ -1262,26 +1262,130 @@ class Renderer(TooltipMixin):
         size: tuple[int, int],
         *hint_texts: str,
     ) -> pygame.Surface | None:
-        for asset_ref in self._player_asset_candidates(player_avatar_gender):
-            surface = self._load_asset_surface("npc", asset_ref, size, *hint_texts)
+        for asset_kind, asset_ref in self._player_asset_candidates(player_avatar_gender):
+            surface = self._load_asset_surface(asset_kind, asset_ref, size, *hint_texts)
             if surface is not None:
                 return surface
         return None
 
-    def _player_asset_candidates(self, player_avatar_gender: str) -> tuple[str, ...]:
+    def _player_asset_candidates(self, player_avatar_gender: str) -> tuple[tuple[str, str], ...]:
         if player_avatar_gender == "female":
             return (
-                "menu_player_female.png",
-                "female_detective.png",
-                "female_suspect.png",
-                "woman_green.png",
+                ("character", "1.png"),
+                ("npc", "menu_player_female.png"),
+                ("npc", "female_detective.png"),
+                ("npc", "female_suspect.png"),
+                ("npc", "woman_green.png"),
             )
         return (
-            "menu_player_male.png",
-            "detective.png",
-            "man_blue.png",
-            "assistant.png",
+            ("character", "2.png"),
+            ("npc", "menu_player_male.png"),
+            ("npc", "detective.png"),
+            ("npc", "man_blue.png"),
+            ("npc", "assistant.png"),
         )
+
+    def _load_npc_surface(self, npc: NPC, size: tuple[int, int]) -> pygame.Surface | None:
+        for asset_kind, asset_ref in self._npc_asset_candidates(npc):
+            surface = self._load_asset_surface(asset_kind, asset_ref, size, npc.id, npc.name, npc.image)
+            if surface is not None:
+                return surface
+        return None
+
+    def _npc_asset_candidates(self, npc: NPC) -> tuple[tuple[str, str], ...]:
+        return (
+            *self._preferred_character_candidates(npc.id, npc.name, npc.image),
+            ("npc", npc.image),
+        )
+
+    def _preferred_character_candidates(self, *hint_texts: str) -> tuple[tuple[str, str], ...]:
+        normalized = " ".join(fragment.strip().lower() for fragment in hint_texts if fragment).strip()
+        if not normalized:
+            return ()
+
+        if self._text_matches_any(
+            normalized,
+            "doctor",
+            "博士",
+            "医生",
+            "medical",
+            "clinic",
+            "private_doctor",
+            "doctor_zhang",
+            "何医生",
+            "张博士",
+        ):
+            return self._character_asset_sequence("5.png", "6.png", "3.png", "2.png")
+
+        if self._text_matches_any(
+            normalized,
+            "female",
+            "woman",
+            "姨",
+            "女士",
+            "teacher",
+            "teacher_lin",
+            "su_man",
+            "auction_rival",
+            "restoration_teacher",
+            "zhouyi",
+            "ruanzhixia",
+            "周姨",
+            "阮知夏",
+            "苏曼",
+            "林老师",
+            "许岚",
+            "female_suspect",
+            "female_detective",
+        ):
+            return self._character_asset_sequence("4.png", "1.png", "5.png", "6.png")
+
+        if self._text_matches_any(
+            normalized,
+            "old",
+            "elder",
+            "butler",
+            "guard",
+            "security",
+            "detective",
+            "old_chen",
+            "victim",
+            "老",
+            "管家",
+            "安保",
+            "馆长",
+            "周启",
+            "沈策",
+            "赵万山",
+            "傅承泽",
+        ):
+            return self._character_asset_sequence("3.png", "6.png", "2.png", "5.png")
+
+        if self._text_matches_any(
+            normalized,
+            "witness",
+            "旁观者",
+            "man",
+            "male",
+            "polo",
+            "assistant",
+        ):
+            return self._character_asset_sequence("6.png", "3.png", "2.png", "5.png")
+
+        return self._character_asset_sequence("6.png", "3.png", "4.png", "5.png")
+
+    def _character_asset_sequence(self, *filenames: str) -> tuple[tuple[str, str], ...]:
+        unique: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for filename in filenames:
+            if filename in seen:
+                continue
+            seen.add(filename)
+            unique.append(("character", filename))
+        return tuple(unique)
+
+    def _text_matches_any(self, text: str, *keywords: str) -> bool:
+        return any(keyword in text for keyword in keywords)
 
     def _resolve_npc_position(self, npc: NPC, elapsed_seconds: float) -> tuple[int, int]:
         if not npc.patrol:
