@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from queue import Empty, Queue
 import threading
 from typing import Literal
@@ -14,6 +14,7 @@ from reverse_detective.config import (
     AIConfig,
     AppConfig,
     DisplayConfig,
+    PlayerConfig,
     load_api_key,
     load_config,
     save_api_key,
@@ -36,8 +37,11 @@ PLAY_AREA_HEIGHT = 520
 PLAYER_SIZE = (42, 62)
 PLAYER_SPEED = 240.0
 MAIN_MENU_OPTIONS = ("开始游戏", "选项设置", "退出游戏")
+PLAYER_AVATAR_OPTIONS = ("male", "female")
 SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("window_title", "窗口标题", "text"),
+    ("detective_name", "侦探名字", "text"),
+    ("avatar_gender", "主控形象", "choice"),
     ("fps", "帧率 FPS", "int"),
     ("base_url", "请求 Base URL", "text"),
     ("api_key", "API Key", "secret"),
@@ -78,6 +82,8 @@ class DetailModal:
 @dataclass(slots=True)
 class SettingsDraft:
     window_title: str
+    detective_name: str
+    avatar_gender: str
     fps: int
     base_url: str
     api_key: str
@@ -92,6 +98,8 @@ class SettingsDraft:
     def from_config(cls, config: AppConfig, api_key: str) -> "SettingsDraft":
         return cls(
             window_title=config.display.title,
+            detective_name=config.player.detective_name,
+            avatar_gender=config.player.avatar_gender,
             fps=config.display.fps,
             base_url=config.ai.base_url,
             api_key=api_key,
@@ -104,6 +112,9 @@ class SettingsDraft:
         )
 
     def to_config(self, current_config: AppConfig) -> AppConfig:
+        avatar_gender = self.avatar_gender.strip().lower()
+        if avatar_gender not in PLAYER_AVATAR_OPTIONS:
+            avatar_gender = current_config.player.avatar_gender
         return AppConfig(
             display=DisplayConfig(
                 title=self.window_title.strip(),
@@ -121,6 +132,10 @@ class SettingsDraft:
                 use_mock_when_unconfigured=self.use_mock_when_unconfigured,
                 fallback_to_mock_on_error=self.fallback_to_mock_on_error,
                 credentials_path=current_config.ai.credentials_path,
+            ),
+            player=PlayerConfig(
+                detective_name=self.detective_name.strip() or current_config.player.detective_name,
+                avatar_gender=avatar_gender,
             ),
         )
 
@@ -334,13 +349,21 @@ class GameApp:
             self._return_to_main_menu()
             return
 
-        if key in (pygame.K_LEFT, pygame.K_RIGHT) and field_kind == "bool":
-            self._toggle_setting(field_name)
+        if key in (pygame.K_LEFT, pygame.K_RIGHT):
+            if field_kind == "bool":
+                self._toggle_setting(field_name)
+                return
+            if field_kind == "choice":
+                direction = -1 if key == pygame.K_LEFT else 1
+                self._cycle_choice_setting(field_name, direction)
+                return
             return
 
         if key == pygame.K_RETURN:
             if field_kind == "bool":
                 self._toggle_setting(field_name)
+            elif field_kind == "choice":
+                self._cycle_choice_setting(field_name, 1)
             else:
                 self._editing_field = field_name
                 self._input_buffer = str(getattr(self._settings_draft, field_name))
@@ -627,38 +650,48 @@ class GameApp:
             )
 
     def _draw(self) -> None:
+        runtime_background = self._runtime_background()
+        runtime_avatar_gender = self._runtime_avatar_gender()
+        runtime_operator_name = self._runtime_operator_name()
+
         if self._mode == "main_menu":
             self._schedule_initial_scene_prefetch()
             self._menu_renderer.draw_main_menu(
-                self._background,
+                runtime_background,
                 list(MAIN_MENU_OPTIONS),
                 self._main_menu_index,
                 self._status_text,
+                operator_portrait_name=runtime_operator_name,
+                operator_portrait_gender=runtime_avatar_gender,
             )
             return
 
         if self._mode == "story_browser":
             self._schedule_initial_scene_prefetch()
             self._menu_renderer.draw_story_browser(
-                self._background,
+                runtime_background,
                 self.current_story,
                 self.current_role,
                 self._menu_selection.story_index,
                 len(self._stories),
                 self._story_focus,
                 self._detail_modal,
+                operator_portrait_name=runtime_operator_name,
+                operator_portrait_gender=runtime_avatar_gender,
             )
             return
 
         if self._mode == "settings":
             self._menu_renderer.draw_settings(
-                self._background,
+                runtime_background,
                 list(SETTINGS_FIELDS),
                 self._settings_index,
                 self._settings_draft,
                 self._editing_field,
                 self._input_buffer,
                 self._settings_status_text(),
+                operator_portrait_name=runtime_operator_name,
+                operator_portrait_gender=runtime_avatar_gender,
             )
             return
 
@@ -672,6 +705,7 @@ class GameApp:
             self._elapsed_seconds,
             self._premise.player_display_name,
             self._premise.story_title,
+            player_avatar_gender=runtime_avatar_gender,
         )
 
     def _enter_story_browser(self) -> None:
@@ -786,6 +820,10 @@ class GameApp:
                 value = raw_value.strip()
                 if not value:
                     raise ValueError("窗口标题不能为空。")
+            elif field_name == "detective_name":
+                value = raw_value.strip()
+                if not value:
+                    raise ValueError("侦探名字不能为空。")
             elif field_name == "fps":
                 value = int(raw_value.strip())
                 if value < 15:
@@ -821,12 +859,31 @@ class GameApp:
         setattr(self._settings_draft, field_name, not current)
         self._status_text = f"{self._field_label(field_name)} 已切换，按 S 保存。"
 
+    def _cycle_choice_setting(self, field_name: str, direction: int) -> None:
+        if field_name != "avatar_gender":
+            return
+
+        current = str(getattr(self._settings_draft, field_name)).strip().lower()
+        try:
+            current_index = PLAYER_AVATAR_OPTIONS.index(current)
+        except ValueError:
+            current_index = 0
+        next_index = (current_index + direction) % len(PLAYER_AVATAR_OPTIONS)
+        setattr(self._settings_draft, field_name, PLAYER_AVATAR_OPTIONS[next_index])
+        self._status_text = f"{self._field_label(field_name)} 已切换，按 S 保存。"
+
     def _save_settings(self) -> None:
         candidate = self._settings_draft.to_config(self._config)
         api_key = self._settings_draft.api_key.strip()
 
         if not candidate.display.title:
             self._status_text = "窗口标题不能为空。"
+            return
+        if not candidate.player.detective_name:
+            self._status_text = "侦探名字不能为空。"
+            return
+        if candidate.player.avatar_gender not in PLAYER_AVATAR_OPTIONS:
+            self._status_text = "主控形象必须为 male 或 female。"
             return
         if candidate.display.fps < 15:
             self._status_text = "帧率不能低于 15。"
@@ -935,9 +992,73 @@ class GameApp:
                 return label
         return field_name
 
+    def _runtime_operator_name(self) -> str:
+        candidate = self._config.player.detective_name.strip()
+        return candidate or self._background.operator_name
+
+    def _runtime_avatar_gender(self) -> str:
+        candidate = self._config.player.avatar_gender.strip().lower()
+        if candidate in PLAYER_AVATAR_OPTIONS:
+            return candidate
+        return PLAYER_AVATAR_OPTIONS[0]
+
+    def _replace_operator_name(self, text: str, *source_names: str) -> str:
+        if not text:
+            return text
+
+        updated = text
+        replacement = self._runtime_operator_name()
+        for source_name in {name.strip() for name in source_names if name and name.strip()}:
+            updated = updated.replace(source_name, replacement)
+        return updated
+
+    def _runtime_background(self) -> GameBackgroundDefinition:
+        return replace(
+            self._background,
+            operator_name=self._runtime_operator_name(),
+            background=self._replace_operator_name(
+                self._background.background,
+                self._background.operator_name,
+            ),
+            briefing=self._replace_operator_name(
+                self._background.briefing,
+                self._background.operator_name,
+            ),
+            menu_intro=self._replace_operator_name(
+                self._background.menu_intro,
+                self._background.operator_name,
+            ),
+        )
+
+    def _runtime_story(self, story: StoryDefinition) -> StoryDefinition:
+        operator_name = self._runtime_operator_name()
+        return replace(
+            story,
+            simulation_operator_name=operator_name,
+            simulation_background=self._replace_operator_name(
+                story.simulation_background,
+                story.simulation_operator_name,
+                self._background.operator_name,
+                story.detective_name,
+            ),
+            simulation_briefing=self._replace_operator_name(
+                story.simulation_briefing,
+                story.simulation_operator_name,
+                self._background.operator_name,
+                story.detective_name,
+            ),
+            opening_hook=self._replace_operator_name(
+                story.opening_hook,
+                story.detective_name,
+                story.simulation_operator_name,
+                self._background.operator_name,
+            ),
+            detective_name=operator_name,
+        )
+
     @property
     def current_story(self) -> StoryDefinition:
-        return self._stories[self._menu_selection.story_index]
+        return self._runtime_story(self._stories[self._menu_selection.story_index])
 
     @property
     def current_role(self) -> StoryRole:

@@ -12,6 +12,8 @@ import tomllib
 DEFAULT_CONFIG_PATH = Path("config.toml")
 DEFAULT_CREDENTIALS_PATH = Path("~/.reverse_detective/credentials.json").expanduser()
 DEFAULT_AI_TIMEOUT_SECONDS = 120.0
+DEFAULT_PLAYER_NAME = "江川"
+DEFAULT_PLAYER_AVATAR_GENDER = "male"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +38,16 @@ class AIConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class PlayerConfig:
+    detective_name: str
+    avatar_gender: str
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     display: DisplayConfig
     ai: AIConfig
+    player: PlayerConfig
 
 
 def load_config(config_path: Path | None = None) -> AppConfig:
@@ -47,6 +56,10 @@ def load_config(config_path: Path | None = None) -> AppConfig:
     config_data = _read_toml(config_path or DEFAULT_CONFIG_PATH)
     display_data = _as_dict(config_data.get("display"))
     ai_data = _as_dict(config_data.get("ai"))
+    player_data = _as_dict(config_data.get("player"))
+    avatar_gender = str(player_data.get("avatar_gender", DEFAULT_PLAYER_AVATAR_GENDER)).strip().lower()
+    if avatar_gender not in {"male", "female"}:
+        avatar_gender = DEFAULT_PLAYER_AVATAR_GENDER
 
     return AppConfig(
         display=DisplayConfig(
@@ -67,6 +80,13 @@ def load_config(config_path: Path | None = None) -> AppConfig:
             credentials_path=Path(
                 str(ai_data.get("credentials_path", DEFAULT_CREDENTIALS_PATH))
             ).expanduser(),
+        ),
+        player=PlayerConfig(
+            detective_name=(
+                str(player_data.get("detective_name", DEFAULT_PLAYER_NAME)).strip()
+                or DEFAULT_PLAYER_NAME
+            ),
+            avatar_gender=avatar_gender,
         ),
     )
 
@@ -122,6 +142,10 @@ def save_config(config: AppConfig, config_path: Path | None = None) -> None:
             f"use_mock_when_unconfigured = {_toml_bool(config.ai.use_mock_when_unconfigured)}",
             f"fallback_to_mock_on_error = {_toml_bool(config.ai.fallback_to_mock_on_error)}",
             f"credentials_path = {_toml_quote(str(config.ai.credentials_path))}",
+            "",
+            "[player]",
+            f"detective_name = {_toml_quote(config.player.detective_name)}",
+            f"avatar_gender = {_toml_quote(config.player.avatar_gender)}",
             "",
         ]
     )

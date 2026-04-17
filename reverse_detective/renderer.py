@@ -312,7 +312,9 @@ class PlaceholderAssetResolver:
     def resolve_interactable_style(self, key: str) -> PlaceholderStyle:
         return self._style_from_key(key, ((243, 197, 97), (95, 66, 24), (27, 20, 12), (47, 37, 16)))
 
-    def resolve_player_style(self) -> PlaceholderStyle:
+    def resolve_player_style(self, gender: str = "male") -> PlaceholderStyle:
+        if gender == "female":
+            return PlaceholderStyle((183, 111, 146), (91, 45, 68), (255, 245, 232), (46, 16, 12))
         return PlaceholderStyle((211, 92, 76), (88, 34, 29), (255, 245, 232), (46, 16, 12))
 
     def _style_from_key(
@@ -359,11 +361,13 @@ class Renderer(TooltipMixin):
         elapsed_seconds: float,
         player_label: str,
         story_title: str,
+        *,
+        player_avatar_gender: str = "male",
     ) -> None:
         self._begin_tooltip_frame()
         scene = session.current_scene
         self._draw_background(scene)
-        self._draw_world(scene, session, elapsed_seconds, player_label)
+        self._draw_world(scene, session, elapsed_seconds, player_label, player_avatar_gender)
         self._draw_hud(scene, session, mode_label, story_title)
 
         active_interactable = session.active_interactable
@@ -427,6 +431,7 @@ class Renderer(TooltipMixin):
         session: GameSessionState,
         elapsed_seconds: float,
         player_label: str,
+        player_avatar_gender: str,
     ) -> None:
         for npc in scene.npcs:
             self._draw_npc(npc, elapsed_seconds)
@@ -437,7 +442,7 @@ class Renderer(TooltipMixin):
             active = session.active_interactable_id == interactable.id and not session.needs_settlement
             self._draw_interactable(interactable, active)
 
-        self._draw_player(session.player_position, player_label)
+        self._draw_player(session.player_position, player_label, player_avatar_gender)
 
     def _draw_npc(self, npc: NPC, elapsed_seconds: float) -> None:
         style = self._resolver.resolve_npc_style(npc.id)
@@ -491,14 +496,25 @@ class Renderer(TooltipMixin):
         pygame.draw.rect(self._surface, style.outline, rect, width=3, border_radius=14)
         self._draw_label(interactable.name, (x, y - 44), style.text, max_width=150)
 
-    def _draw_player(self, player_position: tuple[float, float], player_label: str) -> None:
-        style = self._resolver.resolve_player_style()
+    def _draw_player(
+        self,
+        player_position: tuple[float, float],
+        player_label: str,
+        player_avatar_gender: str,
+    ) -> None:
+        style = self._resolver.resolve_player_style(player_avatar_gender)
         x = int(player_position[0])
         y = int(player_position[1])
         shadow_rect = pygame.Rect(x - 22, y + 24, 44, 14)
         body_rect = pygame.Rect(x - 20, y - 38, 40, 62)
 
         pygame.draw.ellipse(self._surface, style.shadow, shadow_rect)
+        sprite = self._load_player_surface(player_avatar_gender, (102, 146), player_label)
+        if sprite is not None:
+            sprite_rect = sprite.get_rect(midbottom=(x, y + 28))
+            self._surface.blit(sprite, sprite_rect)
+            self._draw_label(player_label, (x, sprite_rect.y - 22), style.text, max_width=150)
+            return
         pygame.draw.rect(self._surface, style.fill, body_rect, border_radius=14)
         pygame.draw.rect(self._surface, style.outline, body_rect, width=3, border_radius=14)
         pygame.draw.circle(self._surface, style.fill, (x, y - 54), 17)
@@ -1003,6 +1019,33 @@ class Renderer(TooltipMixin):
         self._image_cache[cache_key] = loaded
         return loaded
 
+    def _load_player_surface(
+        self,
+        player_avatar_gender: str,
+        size: tuple[int, int],
+        *hint_texts: str,
+    ) -> pygame.Surface | None:
+        for asset_ref in self._player_asset_candidates(player_avatar_gender):
+            surface = self._load_asset_surface("npc", asset_ref, size, *hint_texts)
+            if surface is not None:
+                return surface
+        return None
+
+    def _player_asset_candidates(self, player_avatar_gender: str) -> tuple[str, ...]:
+        if player_avatar_gender == "female":
+            return (
+                "menu_player_female.png",
+                "female_detective.png",
+                "female_suspect.png",
+                "woman_green.png",
+            )
+        return (
+            "menu_player_male.png",
+            "detective.png",
+            "man_blue.png",
+            "assistant.png",
+        )
+
     def _resolve_npc_position(self, npc: NPC, elapsed_seconds: float) -> tuple[int, int]:
         if not npc.patrol:
             return npc.position
@@ -1065,10 +1108,18 @@ def _tint(color: Color, delta: int) -> Color:
 class MenuRenderer(TooltipMixin):
     """Renderer for the main menu, dossier browser, settings and modal overlays."""
 
-    def __init__(self, surface: pygame.Surface, width: int, height: int):
+    def __init__(
+        self,
+        surface: pygame.Surface,
+        width: int,
+        height: int,
+        asset_root: Path | None = None,
+    ):
         self._surface = surface
         self._width = width
         self._height = height
+        self._asset_root = (asset_root or DEFAULT_ASSET_CACHE_ROOT).resolve()
+        self._image_cache: dict[tuple[str, tuple[int, int]], pygame.Surface] = {}
         self._display_font = pygame.font.SysFont("georgia", 46, bold=True)
         self._hero_font = pygame.font.SysFont("georgia", 72, bold=True)
         self._title_font = pygame.font.SysFont("microsoftyaheiui", 28, bold=True)
@@ -1082,9 +1133,15 @@ class MenuRenderer(TooltipMixin):
         options: list[str],
         selected_index: int,
         status_text: str | None,
+        *,
+        operator_portrait_name: str | None = None,
+        operator_portrait_gender: str = "male",
     ) -> None:
         self._begin_tooltip_frame()
-        self._draw_background()
+        self._draw_background(
+            operator_portrait_name=operator_portrait_name,
+            operator_portrait_gender=operator_portrait_gender,
+        )
         self._draw_chrome(background.game_title, background.game_subtitle, background.operator_name)
 
         left_panel = pygame.Rect(48, 150, 560, 470)
@@ -1109,7 +1166,7 @@ class MenuRenderer(TooltipMixin):
             line_gap=8,
         )
 
-        self._section_title("江川的动机", 82, 394)
+        self._section_title(f"{background.operator_name}的动机", 82, 394)
         self._blit_preview_block(
             self._small_font,
             background.background,
@@ -1171,9 +1228,15 @@ class MenuRenderer(TooltipMixin):
         story_count: int,
         focus: str,
         detail_modal: Any | None,
+        *,
+        operator_portrait_name: str | None = None,
+        operator_portrait_gender: str = "male",
     ) -> None:
         self._begin_tooltip_frame()
-        self._draw_background()
+        self._draw_background(
+            operator_portrait_name=operator_portrait_name,
+            operator_portrait_gender=operator_portrait_gender,
+        )
         self._draw_chrome(background.game_title, "卷宗选择", background.operator_name)
 
         left = pygame.Rect(42, 126, 548, 520)
@@ -1236,9 +1299,15 @@ class MenuRenderer(TooltipMixin):
         editing_field: str | None,
         input_buffer: str,
         status_text: str | None,
+        *,
+        operator_portrait_name: str | None = None,
+        operator_portrait_gender: str = "male",
     ) -> None:
         self._begin_tooltip_frame()
-        self._draw_background()
+        self._draw_background(
+            operator_portrait_name=operator_portrait_name,
+            operator_portrait_gender=operator_portrait_gender,
+        )
         self._draw_chrome(background.game_title, "选项设置", background.operator_name)
 
         panel = pygame.Rect(88, 126, self._width - 176, 520)
@@ -1253,8 +1322,23 @@ class MenuRenderer(TooltipMixin):
             panel.width - 48,
         )
 
+        column_count = 2 if panel.width >= 880 else 1
+        column_gap = 18
+        rows_per_column = max(1, math.ceil(len(fields) / column_count))
+        available_width = panel.width - 48 - column_gap * (column_count - 1)
+        column_width = max(280, available_width // column_count)
+        row_height = 42
+        row_gap = 10
+
         for index, (field_name, label, field_kind) in enumerate(fields):
-            row = pygame.Rect(panel.x + 24, panel.y + 96 + index * 52, panel.width - 48, 42)
+            column_index = index // rows_per_column
+            row_index = index % rows_per_column
+            row = pygame.Rect(
+                panel.x + 24 + column_index * (column_width + column_gap),
+                panel.y + 96 + row_index * (row_height + row_gap),
+                column_width,
+                row_height,
+            )
             selected = index == selected_index
             fill = (228, 193, 127) if selected else (34, 41, 52)
             border = (244, 227, 192) if selected else (97, 109, 123)
@@ -1268,15 +1352,15 @@ class MenuRenderer(TooltipMixin):
                 label,
                 (row.x + 14, row.y + 11),
                 text_color,
-                250,
+                max(120, row.width // 2 - 18),
                 selected=selected,
             )
             self._blit_clamped_line(
                 self._small_font,
                 full_value,
-                (row.x + 280, row.y + 11),
+                (row.x + row.width // 2, row.y + 11),
                 text_color,
-                row.width - 320,
+                max(120, row.width // 2 - 18),
                 selected=selected,
                 tooltip_text=f"{label}: {full_value}",
             )
@@ -1308,7 +1392,12 @@ class MenuRenderer(TooltipMixin):
         self._draw_tooltip_overlay()
         pygame.display.flip()
 
-    def _draw_background(self) -> None:
+    def _draw_background(
+        self,
+        *,
+        operator_portrait_name: str | None = None,
+        operator_portrait_gender: str = "male",
+    ) -> None:
         top = (11, 24, 28)
         bottom = (53, 39, 30)
         for y in range(self._height):
@@ -1320,6 +1409,147 @@ class MenuRenderer(TooltipMixin):
             pygame.draw.line(self._surface, (88, 50, 42), (x, 0), (x - 120, self._height), width=1)
         for y in range(110, self._height, 150):
             pygame.draw.line(self._surface, (29, 51, 54), (0, y), (self._width, y - 50), width=1)
+
+        self._draw_operator_portrait_backdrop(operator_portrait_name, operator_portrait_gender)
+
+    def _draw_operator_portrait_backdrop(
+        self,
+        operator_portrait_name: str | None,
+        operator_portrait_gender: str,
+    ) -> None:
+        portrait_width = min(460, max(220, self._width // 3))
+        portrait_height = min(self._height - 118, max(240, int(self._height * 0.8)))
+        portrait_rect = pygame.Rect(
+            self._width - portrait_width - 36,
+            self._height - portrait_height - 36,
+            portrait_width,
+            portrait_height,
+        )
+
+        glow_rect = portrait_rect.inflate(32, 28)
+        glow_surface = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
+        pygame.draw.ellipse(
+            glow_surface,
+            (225, 194, 131, 34),
+            glow_surface.get_rect(),
+        )
+        self._surface.blit(glow_surface, glow_rect.topleft)
+
+        portrait_surface = self._load_menu_portrait_surface(
+            operator_portrait_gender,
+            portrait_rect.size,
+            operator_portrait_name or "",
+        )
+        if portrait_surface is not None:
+            toned = portrait_surface.copy()
+            shade = pygame.Surface(toned.get_size(), pygame.SRCALPHA)
+            shade.fill((8, 12, 18, 158))
+            toned.blit(shade, (0, 0))
+            toned.set_alpha(170)
+            self._surface.blit(toned, portrait_rect.topleft)
+        else:
+            self._draw_portrait_placeholder(portrait_rect, operator_portrait_gender)
+
+        fade_surface = pygame.Surface(portrait_rect.size, pygame.SRCALPHA)
+        fade_surface.fill((0, 0, 0, 0))
+        pygame.draw.rect(fade_surface, (10, 14, 18, 118), fade_surface.get_rect(), border_radius=28)
+        self._surface.blit(fade_surface, portrait_rect.topleft)
+
+    def _draw_portrait_placeholder(self, portrait_rect: pygame.Rect, operator_portrait_gender: str) -> None:
+        silhouette = pygame.Surface(portrait_rect.size, pygame.SRCALPHA)
+        tint = (207, 154, 171, 74) if operator_portrait_gender == "female" else (188, 170, 149, 74)
+        outline = (232, 204, 160, 52)
+        center_x = portrait_rect.width // 2
+        body_top = max(92, portrait_rect.height // 3)
+        body_bottom = portrait_rect.height - 26
+        head_radius = max(30, portrait_rect.width // 9)
+
+        pygame.draw.ellipse(
+            silhouette,
+            (12, 16, 22, 88),
+            pygame.Rect(center_x - 92, body_bottom - 34, 184, 34),
+        )
+        pygame.draw.circle(silhouette, tint, (center_x, body_top - 28), head_radius)
+        pygame.draw.polygon(
+            silhouette,
+            tint,
+            [
+                (center_x - 72, body_top + 12),
+                (center_x + 72, body_top + 12),
+                (center_x + 122, body_bottom),
+                (center_x - 122, body_bottom),
+            ],
+        )
+        pygame.draw.circle(silhouette, outline, (center_x, body_top - 28), head_radius, width=4)
+        pygame.draw.polygon(
+            silhouette,
+            outline,
+            [
+                (center_x - 72, body_top + 12),
+                (center_x + 72, body_top + 12),
+                (center_x + 122, body_bottom),
+                (center_x - 122, body_bottom),
+            ],
+            width=4,
+        )
+        self._surface.blit(silhouette, portrait_rect.topleft)
+
+    def _load_menu_portrait_surface(
+        self,
+        operator_portrait_gender: str,
+        size: tuple[int, int],
+        *hint_texts: str,
+    ) -> pygame.Surface | None:
+        for asset_ref in self._menu_portrait_candidates(operator_portrait_gender):
+            surface = self._load_menu_asset_surface("npc", asset_ref, size, *hint_texts)
+            if surface is not None:
+                return surface
+        return None
+
+    def _menu_portrait_candidates(self, operator_portrait_gender: str) -> tuple[str, ...]:
+        if operator_portrait_gender == "female":
+            return (
+                "menu_player_female.png",
+                "female_detective.png",
+                "female_suspect.png",
+                "woman_green.png",
+            )
+        return (
+            "menu_player_male.png",
+            "detective.png",
+            "man_blue.png",
+            "assistant.png",
+        )
+
+    def _load_menu_asset_surface(
+        self,
+        asset_kind: str,
+        asset_ref: str,
+        size: tuple[int, int],
+        *hint_texts: str,
+    ) -> pygame.Surface | None:
+        asset_path = resolve_cached_asset_path(asset_kind, asset_ref, self._asset_root, *hint_texts)
+        if asset_path is None or not asset_path.is_file():
+            return None
+
+        cache_key = (str(asset_path), size)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            loaded = pygame.image.load(str(asset_path))
+            if loaded.get_alpha() is not None:
+                loaded = loaded.convert_alpha()
+            else:
+                loaded = loaded.convert()
+            if loaded.get_size() != size:
+                loaded = pygame.transform.smoothscale(loaded, size)
+        except Exception:
+            return None
+
+        self._image_cache[cache_key] = loaded
+        return loaded
 
     def _draw_chrome(self, title_text: str, subtitle_text: str, operator_name: str) -> None:
         header_rect = pygame.Rect(34, 24, self._width - 68, 84)
@@ -1577,6 +1807,8 @@ class MenuRenderer(TooltipMixin):
         value = getattr(draft, field_name)
         if field_kind == "bool":
             return "开启" if value else "关闭"
+        if field_name == "avatar_gender":
+            return "男主控" if str(value).strip().lower() == "male" else "女主控"
         if field_name == "api_key":
             return self._mask_secret(str(value))
         return str(value) or "(空)"

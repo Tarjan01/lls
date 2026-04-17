@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pygame
 import pytest
 
 from reverse_detective.app import GameApp
-from reverse_detective.config import load_config
+from reverse_detective.config import PlayerConfig, load_config
 from reverse_detective.scene_loader import load_scene_payload
 
 
@@ -16,7 +18,7 @@ def test_game_app_starts_on_menu(monkeypatch: pytest.MonkeyPatch) -> None:
     try:
         assert app._mode == "main_menu"
         assert app._session is None
-        assert app._background.operator_name == "江川"
+        assert app._runtime_background().operator_name == app._config.player.detective_name
         assert len(app._stories) >= 2
         assert app._main_menu_index == 0
     finally:
@@ -111,6 +113,8 @@ def test_settings_save_updates_runtime_config(monkeypatch: pytest.MonkeyPatch) -
     app = GameApp(load_config())
     try:
         app._settings_draft.window_title = "Reverse Detective Test"
+        app._settings_draft.detective_name = "林岚"
+        app._settings_draft.avatar_gender = "female"
         app._settings_draft.fps = 75
         app._settings_draft.base_url = "https://example.com/v1"
         app._settings_draft.api_key = "test-secret-key"
@@ -122,6 +126,8 @@ def test_settings_save_updates_runtime_config(monkeypatch: pytest.MonkeyPatch) -
         app._save_settings()
 
         assert app._config.display.title == "Reverse Detective Test"
+        assert app._config.player.detective_name == "林岚"
+        assert app._config.player.avatar_gender == "female"
         assert app._config.display.fps == 75
         assert app._config.ai.base_url == "https://example.com/v1"
         assert app._config.ai.model == "gpt-test"
@@ -133,5 +139,28 @@ def test_settings_save_updates_runtime_config(monkeypatch: pytest.MonkeyPatch) -
             app._config.ai.provider,
             "test-secret-key",
         )
+    finally:
+        pygame.quit()
+
+
+def test_current_story_uses_runtime_player_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    try:
+        app._config = replace(
+            app._config,
+            player=PlayerConfig(detective_name="林岚", avatar_gender="female"),
+        )
+
+        story = app.current_story
+        background = app._runtime_background()
+
+        assert story.detective_name == "林岚"
+        assert story.simulation_operator_name == "林岚"
+        assert "林岚" in story.opening_hook
+        assert background.operator_name == "林岚"
+        assert "林岚" in background.menu_intro
     finally:
         pygame.quit()
