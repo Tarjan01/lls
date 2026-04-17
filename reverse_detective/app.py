@@ -683,6 +683,7 @@ class GameApp:
             or self._session.current_scene.is_terminal
         ):
             return
+        self._clear_selected_text_readers()
         self._begin_input_edit(
             field_name="__freeform_action__",
             title="自由行动",
@@ -1135,6 +1136,7 @@ class GameApp:
             self._return_to_main_menu()
             return
 
+        active_editor = self._input_editor
         self._audio.sync_scene(self._session.current_scene)
         self._game_renderer.draw(
             self._session,
@@ -1144,6 +1146,13 @@ class GameApp:
             self._premise.story_title,
             player_avatar_gender=runtime_avatar_gender,
             panel_focus=self._game_panel_focus,
+            input_title=None if active_editor is None else active_editor.title,
+            input_value="" if active_editor is None else active_editor.value,
+            input_hint="" if active_editor is None else active_editor.hint_text,
+            input_composition="" if active_editor is None else active_editor.composition,
+            input_cursor=0 if active_editor is None else active_editor.cursor,
+            input_multiline=False if active_editor is None else active_editor.multiline,
+            input_secret=False if active_editor is None else active_editor.secret,
         )
 
     def _enter_story_browser(self) -> None:

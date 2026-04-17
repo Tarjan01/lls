@@ -375,6 +375,13 @@ class Renderer(TooltipMixin):
         *,
         player_avatar_gender: str = "male",
         panel_focus: str = "sidebar",
+        input_title: str | None = None,
+        input_value: str = "",
+        input_hint: str = "",
+        input_composition: str = "",
+        input_cursor: int = 0,
+        input_multiline: bool = False,
+        input_secret: bool = False,
     ) -> None:
         self._begin_tooltip_frame()
         self._action_targets = []
@@ -409,7 +416,18 @@ class Renderer(TooltipMixin):
         if scene.is_terminal and scene.ending_text:
             self._draw_ending_overlay(scene.ending_text)
 
-        self._draw_tooltip_overlay()
+        if input_title is not None:
+            self._draw_input_modal(
+                title=input_title,
+                value=input_value,
+                masked=input_secret,
+                hint_text=input_hint,
+                composition=input_composition,
+                cursor_index=input_cursor,
+                multiline=input_multiline,
+            )
+        else:
+            self._draw_tooltip_overlay()
         pygame.display.flip()
 
     def consume_action_click(self, position: tuple[int, int]) -> str | None:
@@ -814,6 +832,97 @@ class Renderer(TooltipMixin):
                 option_rect.width - 24,
                 selected=is_selected,
                 tooltip_text=tooltip_text,
+            )
+
+    def _draw_input_modal(
+        self,
+        title: str,
+        value: str,
+        masked: bool,
+        *,
+        hint_text: str = "",
+        composition: str = "",
+        cursor_index: int = 0,
+        multiline: bool = False,
+    ) -> None:
+        overlay = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
+        overlay.fill((6, 8, 12, 176))
+        self._surface.blit(overlay, (0, 0))
+
+        rect_height = 248 if multiline else 196
+        rect = pygame.Rect(236, 208 if multiline else 220, self._width - 472, rect_height)
+        pygame.draw.rect(self._surface, (16, 18, 24), rect, border_radius=22)
+        pygame.draw.rect(self._surface, (219, 188, 132), rect, width=2, border_radius=22)
+        self._blit_clamped_line(
+            self._title_font,
+            title,
+            (rect.x + 24, rect.y + 20),
+            (247, 233, 204),
+            rect.width - 48,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            "回车确认输入 | Ctrl+V 粘贴 | Esc 取消"
+            if not multiline
+            else "回车换行 | Ctrl+V 粘贴 | Ctrl+Enter 确认 | Esc 取消",
+            (rect.x + 24, rect.y + 56),
+            (220, 223, 232),
+            rect.width - 48,
+        )
+
+        if composition:
+            composition_rect = pygame.Rect(rect.x + 22, rect.y + 72, rect.width - 44, 20)
+            pygame.draw.rect(self._surface, (69, 52, 30), composition_rect, border_radius=8)
+            pygame.draw.rect(self._surface, (235, 202, 140), composition_rect, width=1, border_radius=8)
+            self._blit_clamped_line(
+                self._small_font,
+                f"输入法候选: {composition}",
+                (composition_rect.x + 10, composition_rect.y + 2),
+                (247, 233, 204),
+                composition_rect.width - 20,
+            )
+
+        input_rect = pygame.Rect(
+            rect.x + 22,
+            rect.y + 92,
+            rect.width - 44,
+            92 if multiline else 52,
+        )
+        pygame.draw.rect(self._surface, (37, 42, 52), input_rect, border_radius=12)
+        pygame.draw.rect(self._surface, (226, 193, 128), input_rect, width=2, border_radius=12)
+        display_value = value if not masked else "*" * len(value)
+        bounded_cursor = min(max(cursor_index, 0), len(display_value))
+        preview_value = f"{display_value[:bounded_cursor]}|{display_value[bounded_cursor:]}"
+
+        if multiline:
+            lines = wrap_text(preview_value or " ", self._small_font, input_rect.width - 24)
+            y = input_rect.y + 12
+            max_height = input_rect.bottom - 10
+            for line in lines[:4]:
+                rendered = self._small_font.render(line, True, (244, 240, 233))
+                self._surface.blit(rendered, (input_rect.x + 12, y))
+                y += rendered.get_height() + 6
+                if y > max_height:
+                    break
+        else:
+            self._blit_clamped_line(
+                self._small_font,
+                preview_value or "|",
+                (input_rect.x + 12, input_rect.y + 15),
+                (244, 240, 233),
+                input_rect.width - 24,
+            )
+
+        footer_y = input_rect.bottom + 10
+        if hint_text:
+            self._blit_preview_block(
+                self._small_font,
+                hint_text,
+                (rect.x + 24, footer_y),
+                (212, 217, 226),
+                rect.width - 48,
+                2,
+                line_gap=4,
             )
 
     def _draw_loading_overlay(self, session: GameSessionState, mode_label: str) -> None:
