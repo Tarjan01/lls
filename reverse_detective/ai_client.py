@@ -111,6 +111,7 @@ class ReverseDetectiveAIClient:
         self._initial_scene_cache_root = (cache_root or DEFAULT_INITIAL_SCENE_CACHE_ROOT).expanduser()
         self._prefetch_lock = threading.Lock()
         self._prefetch_inflight: set[str] = set()
+        self._live_request_lock = threading.Lock()
 
         if not self._live_enabled and not config.use_mock_when_unconfigured:
             raise AIClientError(
@@ -176,6 +177,8 @@ class ReverseDetectiveAIClient:
         cache_key = self._initial_scene_cache_key(premise)
         cache_path = self._initial_scene_cache_path(premise)
         with self._prefetch_lock:
+            if self._prefetch_inflight:
+                return False
             if cache_key in self._prefetch_inflight:
                 return False
             if cache_path.exists() and not force:
@@ -247,27 +250,29 @@ class ReverseDetectiveAIClient:
         return self._mock_engine.generate_scene(request)
 
     def _generate_live_scene(self, request: AIRequestPayload) -> SceneState:
-        last_transport_exc: Exception | None = None
-        for attempt_index, (reasoning_effort, timeout_seconds) in enumerate(
-            self._live_attempt_plan(),
-            start=1,
-        ):
-            try:
-                return self._stream_live_scene_with_deadline(
-                    request,
-                    reasoning_effort=reasoning_effort,
-                    timeout_seconds=timeout_seconds,
-                )
-            except Exception as exc:
-                if not self._is_retryable_live_error(exc):
-                    raise
-                last_transport_exc = exc
-                if attempt_index >= len(self._live_attempt_plan()):
-                    break
-                time.sleep(min(0.6 * attempt_index, 1.2))
+        with self._live_request_lock:
+            last_transport_exc: Exception | None = None
+            for attempt_index, (reasoning_effort, timeout_seconds) in enumerate(
+                self._live_attempt_plan(),
+                start=1,
+            ):
+                try:
+                    return self._stream_live_scene_with_deadline(
+                        request,
+                        reasoning_effort=reasoning_effort,
+                        timeout_seconds=timeout_seconds,
+                    )
+                except Exception as exc:
+                    normalized_error = self._normalize_live_error(exc)
+                    if not self._is_retryable_live_error(normalized_error):
+                        raise normalized_error
+                    last_transport_exc = normalized_error
+                    if attempt_index >= len(self._live_attempt_plan()):
+                        break
+                    time.sleep(min(0.6 * attempt_index, 1.2))
 
-        assert last_transport_exc is not None
-        raise AIClientError(self._format_live_transport_error(last_transport_exc))
+            assert last_transport_exc is not None
+            raise AIClientError(self._format_live_transport_error(last_transport_exc))
 
     def _stream_live_scene(
         self,
@@ -407,6 +412,22 @@ class ReverseDetectiveAIClient:
             OSError,
         )
         return isinstance(exc, retryable_types)
+
+    def _normalize_live_error(self, exc: Exception) -> Exception:
+        details = str(exc).strip()
+        normalized = details.lower()
+        concurrency_markers = (
+            "并发上限",
+            "concurrency",
+            "too many concurrent",
+            "create a new session",
+        )
+        if any(marker in details or marker in normalized for marker in concurrency_markers):
+            return AIClientError(
+                "当前 API Key 同时只能处理一个实时请求。"
+                "刚才很可能还有后台预生成或上一条流式请求尚未结束，请稍等片刻后重试。"
+            )
+        return exc
 
     def _format_live_transport_error(self, exc: Exception) -> str:
         error_type = type(exc).__name__

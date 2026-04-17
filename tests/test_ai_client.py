@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 import time
 
 import httpx
@@ -324,6 +325,15 @@ def test_live_transport_error_message_includes_base_url_and_hint(tmp_path: Path)
     assert "降到 medium" in message
 
 
+def test_live_error_normalizes_concurrency_limit_message(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    error = client._normalize_live_error(RuntimeError("请求已超出当前 API Key 的并发上限，请创建新会话后重试。"))
+
+    assert isinstance(error, Exception)
+    assert "同时只能处理一个实时请求" in str(error)
+
+
 def test_live_timeout_expands_stream_read_deadline_for_normal_requests(tmp_path: Path) -> None:
     client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 
@@ -362,6 +372,63 @@ def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:
     elapsed = time.monotonic() - start
 
     assert elapsed < 1.2
+
+
+def test_live_requests_are_serialized_for_single_api_key(tmp_path: Path) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+    client = ReverseDetectiveAIClient(
+        _build_config(
+            tmp_path,
+            base_url="https://apikey.soxio.me/openai",
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        ),
+        cache_root=tmp_path / "cache",
+    )
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "serialized",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "story",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    active_calls = 0
+    max_active_calls = 0
+    guard = threading.Lock()
+
+    def fake_stream_live_scene_with_deadline(request, *, reasoning_effort: str, timeout_seconds: float):
+        nonlocal active_calls, max_active_calls
+        with guard:
+            active_calls += 1
+            max_active_calls = max(max_active_calls, active_calls)
+        time.sleep(0.15)
+        with guard:
+            active_calls -= 1
+        return scene
+
+    client._stream_live_scene_with_deadline = fake_stream_live_scene_with_deadline  # type: ignore[method-assign]
+    client._live_attempt_plan = lambda: [("xhigh", 30)]  # type: ignore[method-assign]
+
+    threads = [
+        threading.Thread(target=client.generate_initial_scene, args=(build_default_premise(),))
+        for _ in range(2)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=3)
+
+    assert max_active_calls == 1
 
 
 def test_initial_scene_cache_roundtrip_loads_saved_scene(tmp_path: Path) -> None:
