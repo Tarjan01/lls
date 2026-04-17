@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 from pathlib import Path
+from queue import Empty, Queue
+import threading
+import time
 from typing import Any, Literal
+
+import httpx
 
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
@@ -67,6 +72,7 @@ LIVE_WORLD_X_RANGE = (96, LIVE_WORLD_WIDTH - 96)
 LIVE_WORLD_Y_RANGE = (140, LIVE_WORLD_HEIGHT - 68)
 LIVE_NORMALIZED_COORDINATE_MAX = 120
 ACTION_POINTS_PER_SETTLEMENT = 5
+LIVE_RETRYABLE_REASONS = ("xhigh", "high", "medium", "low")
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,21 +179,51 @@ class ReverseDetectiveAIClient:
         return self._mock_engine.generate_scene(request)
 
     def _generate_live_scene(self, request: AIRequestPayload) -> SceneState:
+        last_transport_exc: Exception | None = None
+        for attempt_index, (reasoning_effort, timeout_seconds) in enumerate(
+            self._live_attempt_plan(),
+            start=1,
+        ):
+            try:
+                return self._stream_live_scene_with_deadline(
+                    request,
+                    reasoning_effort=reasoning_effort,
+                    timeout_seconds=timeout_seconds,
+                )
+            except Exception as exc:
+                if not self._is_retryable_live_error(exc):
+                    raise
+                last_transport_exc = exc
+                if attempt_index >= len(self._live_attempt_plan()):
+                    break
+                time.sleep(min(0.6 * attempt_index, 1.2))
+
+        assert last_transport_exc is not None
+        raise AIClientError(self._format_live_transport_error(last_transport_exc))
+
+    def _stream_live_scene(
+        self,
+        request: AIRequestPayload,
+        *,
+        reasoning_effort: str,
+        timeout_seconds: float,
+    ) -> SceneState:
         from openai import OpenAI
 
         client = OpenAI(
             api_key=self._api_key,
             base_url=self._config.base_url,
-            timeout=self._config.timeout_seconds,
+            timeout=self._build_live_timeout(timeout_seconds),
+            max_retries=0,
         )
 
         with client.responses.stream(
             model=self._config.model,
             input=self._build_response_input(request),
-            reasoning={"effort": self._config.reasoning_effort},
+            reasoning={"effort": reasoning_effort},
             text={"format": {"type": "json_object"}},
             store=not self._config.disable_response_storage,
-            temperature=0.7,
+            temperature=0.5,
         ) as stream:
             streamed_scene, response, streamed_text = self._consume_response_stream(stream)
 
@@ -200,8 +236,116 @@ class ReverseDetectiveAIClient:
         except Exception as exc:
             raise AIClientError(f"Live AI returned invalid scene JSON: {exc}") from exc
 
+    def _stream_live_scene_with_deadline(
+        self,
+        request: AIRequestPayload,
+        *,
+        reasoning_effort: str,
+        timeout_seconds: float,
+    ) -> SceneState:
+        result_queue: Queue[tuple[str, SceneState | Exception]] = Queue(maxsize=1)
+
+        def worker() -> None:
+            try:
+                scene = self._stream_live_scene(
+                    request,
+                    reasoning_effort=reasoning_effort,
+                    timeout_seconds=timeout_seconds,
+                )
+            except Exception as exc:
+                result_queue.put(("error", exc))
+                return
+            result_queue.put(("scene", scene))
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        deadline_seconds = max(timeout_seconds + 0.5, 0.5)
+
+        try:
+            result_kind, payload = result_queue.get(timeout=deadline_seconds)
+        except Empty as exc:
+            raise TimeoutError(
+                f"Live AI stream exceeded the overall deadline ({deadline_seconds:.0f}s)"
+            ) from exc
+
+        if result_kind == "error":
+            assert isinstance(payload, Exception)
+            raise payload
+
+        assert isinstance(payload, SceneState)
+        return payload
+
+    def _live_attempt_plan(self) -> list[tuple[str, float]]:
+        configured = (self._config.reasoning_effort or "high").strip().lower()
+        attempts: list[tuple[str, float]] = [(configured, self._config.timeout_seconds)]
+
+        fallback_reason = self._fallback_reasoning_effort(configured)
+        if fallback_reason != configured:
+            attempts.append((fallback_reason, self._config.timeout_seconds))
+
+        return attempts
+
+    def _fallback_reasoning_effort(self, configured: str) -> str:
+        if configured not in LIVE_RETRYABLE_REASONS:
+            return configured
+
+        order = list(LIVE_RETRYABLE_REASONS)
+        index = order.index(configured)
+        if index >= len(order) - 1:
+            return configured
+        if configured == "xhigh":
+            return "medium"
+        if configured == "high":
+            return "medium"
+        if configured == "medium":
+            return "low"
+        return configured
+
+    def _build_live_timeout(self, timeout_seconds: float) -> httpx.Timeout:
+        safe_total = max(10.0, timeout_seconds)
+        return httpx.Timeout(
+            connect=min(10.0, max(4.0, safe_total / 3)),
+            read=safe_total,
+            write=min(20.0, max(6.0, safe_total / 2)),
+            pool=10.0,
+        )
+
+    def _is_retryable_live_error(self, exc: Exception) -> bool:
+        if isinstance(exc, AIClientError):
+            return False
+        try:
+            from openai import APIConnectionError, APITimeoutError
+
+            openai_retryable_types = (APIConnectionError, APITimeoutError)
+        except Exception:
+            openai_retryable_types = ()
+        retryable_types = (
+            *openai_retryable_types,
+            TimeoutError,
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            httpx.RemoteProtocolError,
+            OSError,
+        )
+        return isinstance(exc, retryable_types)
+
+    def _format_live_transport_error(self, exc: Exception) -> str:
+        error_type = type(exc).__name__
+        details = str(exc).strip() or repr(exc)
+        configured = (self._config.reasoning_effort or "high").strip().lower()
+        fallback_reason = self._fallback_reasoning_effort(configured)
+        if fallback_reason != configured:
+            retry_hint = f"已自动尝试将推理强度从 {configured} 降到 {fallback_reason} 后重试一次。"
+        else:
+            retry_hint = "当前推理强度没有可进一步降低的自动重试档位。"
+        return (
+            f"{error_type}: {details}. "
+            f"请求地址 {self._config.base_url} 的网络连通或流式返回存在问题，"
+            f"timeout_seconds={self._config.timeout_seconds}，且客户端已启用总时限保护。{retry_hint}"
+        )
+
     def _build_system_prompt(self) -> str:
-        schema_text = json.dumps(PROMPT_SCHEMA, ensure_ascii=False, indent=2)
+        schema_text = json.dumps(PROMPT_SCHEMA, ensure_ascii=False, separators=(",", ":"))
         return (
             "You generate scene JSON for a reverse-detective game. "
             "Return exactly one JSON object and nothing else. "
@@ -271,7 +415,7 @@ class ReverseDetectiveAIClient:
             if request.current_scene is None
             else scene_to_dict(request.current_scene),
         }
-        return json.dumps(payload, ensure_ascii=False, indent=2)
+        return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
     def _build_response_input(self, request: AIRequestPayload) -> list[dict[str, Any]]:
         return [

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import time
 
+import httpx
 import pytest
 
 from reverse_detective.ai_client import AIRequestPayload, ReverseDetectiveAIClient, build_default_premise
 from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
+from reverse_detective.scene_loader import load_scene_payload
 
 
 def _build_config(tmp_path: Path, **overrides: object) -> AIConfig:
@@ -106,7 +109,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert isinstance(response_input[0]["content"], str)
     assert isinstance(response_input[1]["content"], str)
     assert '"scene_layout"' in response_input[1]["content"]
-    assert '"coordinate_system": "pixel"' in response_input[1]["content"]
+    assert '"coordinate_system":"pixel"' in response_input[1]["content"]
     assert '"balancing_goal"' in response_input[1]["content"]
     assert '"recent_actions"' in response_input[1]["content"]
 
@@ -259,3 +262,84 @@ def test_consume_response_stream_does_not_require_response_completed(tmp_path: P
     assert streamed_scene is None
     assert response is None
     assert streamed_text == '{"scene": {"description": "partial"}}'
+
+
+def test_live_scene_retries_once_after_timeout_then_succeeds(tmp_path: Path) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+    client = ReverseDetectiveAIClient(
+        _build_config(
+            tmp_path,
+            base_url="https://apikey.soxio.me/openai",
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        )
+    )
+    attempts: list[tuple[str, float]] = []
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "scene",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "story",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    def fake_stream_live_scene(request, *, reasoning_effort: str, timeout_seconds: float):
+        attempts.append((reasoning_effort, timeout_seconds))
+        if len(attempts) == 1:
+            raise httpx.ReadTimeout("The read operation timed out")
+        return scene
+
+    client._stream_live_scene = fake_stream_live_scene  # type: ignore[method-assign]
+
+    result = client.generate_initial_scene(build_default_premise())
+
+    assert result.scene.description == "scene"
+    assert attempts == [("xhigh", 30), ("medium", 30)]
+
+
+def test_live_transport_error_message_includes_base_url_and_hint(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path, base_url="https://apikey.soxio.me/openai"))
+
+    message = client._format_live_transport_error(httpx.ReadTimeout("The read operation timed out"))
+
+    assert "https://apikey.soxio.me/openai" in message
+    assert "timeout_seconds=30" in message
+    assert "降到 medium" in message
+
+
+def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:
+    credentials_path = tmp_path / "credentials.json"
+    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
+    client = ReverseDetectiveAIClient(
+        _build_config(
+            tmp_path,
+            base_url="https://apikey.soxio.me/openai",
+            timeout_seconds=0.1,
+            use_mock_when_unconfigured=False,
+            fallback_to_mock_on_error=False,
+            credentials_path=credentials_path,
+        )
+    )
+
+    def fake_stream_live_scene(request, *, reasoning_effort: str, timeout_seconds: float):
+        time.sleep(1.5)
+        raise AssertionError("background thread should be ignored after deadline")
+
+    client._stream_live_scene = fake_stream_live_scene  # type: ignore[method-assign]
+    client._live_attempt_plan = lambda: [("xhigh", 0.1)]  # type: ignore[method-assign]
+
+    start = time.monotonic()
+    with pytest.raises(Exception, match="overall deadline|总时限保护"):
+        client.generate_initial_scene(build_default_premise())
+    elapsed = time.monotonic() - start
+
+    assert elapsed < 1.2
