@@ -1180,6 +1180,7 @@ class MenuRenderer(TooltipMixin):
     ) -> None:
         self._begin_tooltip_frame()
         self._draw_background(
+            menu_kind="main_menu",
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
@@ -1275,6 +1276,7 @@ class MenuRenderer(TooltipMixin):
     ) -> None:
         self._begin_tooltip_frame()
         self._draw_background(
+            menu_kind="story_browser",
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
@@ -1351,6 +1353,7 @@ class MenuRenderer(TooltipMixin):
     ) -> None:
         self._begin_tooltip_frame()
         self._draw_background(
+            menu_kind="settings",
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
@@ -1463,6 +1466,7 @@ class MenuRenderer(TooltipMixin):
     ) -> None:
         self._begin_tooltip_frame()
         self._draw_background(
+            menu_kind="custom_story",
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
@@ -1678,22 +1682,35 @@ class MenuRenderer(TooltipMixin):
     def _draw_background(
         self,
         *,
+        menu_kind: str = "main_menu",
         operator_portrait_name: str | None = None,
         operator_portrait_gender: str = "male",
     ) -> None:
-        top = (11, 24, 28)
-        bottom = (53, 39, 30)
-        for y in range(self._height):
-            ratio = y / max(self._height - 1, 1)
-            color = _lerp_color(top, bottom, ratio)
-            pygame.draw.line(self._surface, color, (0, y), (self._width, y))
+        background_surface = self._load_menu_background_surface(menu_kind, (self._width, self._height))
+        if background_surface is not None:
+            self._surface.blit(background_surface, (0, 0))
+            shade = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
+            shade.fill((7, 11, 16, 176))
+            self._surface.blit(shade, (0, 0))
+        else:
+            top = (11, 24, 28)
+            bottom = (53, 39, 30)
+            for y in range(self._height):
+                ratio = y / max(self._height - 1, 1)
+                color = _lerp_color(top, bottom, ratio)
+                pygame.draw.line(self._surface, color, (0, y), (self._width, y))
 
         for x in range(80, self._width, 220):
             pygame.draw.line(self._surface, (88, 50, 42), (x, 0), (x - 120, self._height), width=1)
         for y in range(110, self._height, 150):
             pygame.draw.line(self._surface, (29, 51, 54), (0, y), (self._width, y - 50), width=1)
 
+        vignette = pygame.Surface((self._width, self._height), pygame.SRCALPHA)
+        pygame.draw.rect(vignette, (0, 0, 0, 90), vignette.get_rect(), width=52, border_radius=24)
+        self._surface.blit(vignette, (0, 0))
+
         self._draw_operator_portrait_backdrop(operator_portrait_name, operator_portrait_gender)
+        self._draw_detective_ui_stamp()
 
     def _draw_operator_portrait_backdrop(
         self,
@@ -1833,6 +1850,67 @@ class MenuRenderer(TooltipMixin):
 
         self._image_cache[cache_key] = loaded
         return loaded
+
+    def _load_menu_background_surface(
+        self,
+        menu_kind: str,
+        size: tuple[int, int],
+    ) -> pygame.Surface | None:
+        for asset_ref in self._menu_background_candidates(menu_kind):
+            surface = self._load_menu_asset_surface("background", asset_ref, size, menu_kind)
+            if surface is not None:
+                return surface
+        return None
+
+    def _menu_background_candidates(self, menu_kind: str) -> tuple[str, ...]:
+        if menu_kind == "story_browser":
+            return (
+                "cybernoir_loft_lounge.png",
+                "menu_cybernoir_cover_4.png",
+                "menu_cybernoir_cover_3.png",
+                "front_gallery.png",
+            )
+        if menu_kind == "settings":
+            return (
+                "cybernoir_loft_lounge.png",
+                "menu_cybernoir_cover_5.png",
+                "security_control_room.png",
+                "menu_cybernoir_cover_4.png",
+            )
+        if menu_kind == "custom_story":
+            return (
+                "cybernoir_loft_lounge.png",
+                "menu_cybernoir_cover_3.png",
+                "menu_cybernoir_cover_5.png",
+                "mansion_study_room.png",
+            )
+        return (
+            "cybernoir_loft_lounge.png",
+            "menu_cybernoir_cover_3.png",
+            "menu_cybernoir_cover_4.png",
+            "menu_cybernoir_cover_5.png",
+        )
+
+    def _draw_detective_ui_stamp(self) -> None:
+        stamp_size = min(132, max(92, self._width // 12))
+        stamp = self._load_menu_asset_surface(
+            "ui",
+            "detective_handdrawn_demo.png",
+            (stamp_size, stamp_size),
+            "detective",
+            "ui",
+            "stamp",
+        )
+        if stamp is None:
+            return
+
+        toned = stamp.copy()
+        shade = pygame.Surface(toned.get_size(), pygame.SRCALPHA)
+        shade.fill((8, 12, 18, 176))
+        toned.blit(shade, (0, 0))
+        toned.set_alpha(136)
+        stamp_rect = toned.get_rect(topleft=(34, self._height - stamp_size - 92))
+        self._surface.blit(toned, stamp_rect)
 
     def _draw_chrome(self, title_text: str, subtitle_text: str, operator_name: str) -> None:
         header_rect = pygame.Rect(34, 24, self._width - 68, 84)

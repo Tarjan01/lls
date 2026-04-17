@@ -7,7 +7,7 @@ import pytest
 
 from reverse_detective.ai_client import build_default_premise
 from reverse_detective.game_state import GameSessionState
-from reverse_detective.renderer import Renderer
+from reverse_detective.renderer import MenuRenderer, Renderer
 from reverse_detective.scene_loader import load_scene_payload
 from reverse_detective.utils.assets import ensure_asset_parent, resolve_cached_asset_path
 
@@ -185,5 +185,35 @@ def test_renderer_resolves_patrol_as_closed_loop(
     try:
         position = renderer._resolve_npc_position(scene.npcs[0], 350.0 / 78.0)
         assert position == (100, 150)
+    finally:
+        pygame.quit()
+
+
+def test_menu_renderer_prefers_cybernoir_loft_background(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    loft_path = resolve_cached_asset_path("background", "cybernoir_loft_lounge.png", tmp_path)
+    cover_path = resolve_cached_asset_path("background", "menu_cybernoir_cover_3.png", tmp_path)
+    assert loft_path is not None
+    assert cover_path is not None
+
+    _write_asset_image(loft_path, (180, 30, 40), (48, 48))
+    _write_asset_image(cover_path, (20, 120, 220), (48, 48))
+
+    renderer = MenuRenderer(screen, 1280, 720, asset_root=tmp_path)
+
+    try:
+        surface = renderer._load_menu_background_surface("main_menu", (48, 48))
+        assert surface is not None
+        assert surface.get_at((12, 12))[:3] == (180, 30, 40)
     finally:
         pygame.quit()
