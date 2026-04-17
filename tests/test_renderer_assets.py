@@ -219,6 +219,67 @@ def test_menu_renderer_prefers_cybernoir_loft_background(
         pygame.quit()
 
 
+def test_menu_renderer_uses_gendered_character_assets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    female_path = tmp_path / "character" / "1.png"
+    male_path = tmp_path / "character" / "2.png"
+    _write_asset_image(female_path, (220, 44, 72), (64, 64))
+    _write_asset_image(male_path, (44, 118, 228), (64, 64))
+
+    renderer = MenuRenderer(screen, 1280, 720, asset_root=tmp_path)
+
+    try:
+        female_surface = renderer._load_menu_portrait_surface("female", (48, 48), "player")
+        male_surface = renderer._load_menu_portrait_surface("male", (48, 48), "player")
+
+        assert female_surface is not None
+        assert male_surface is not None
+        female_pixel = female_surface.get_at((12, 12))[:3]
+        male_pixel = male_surface.get_at((12, 12))[:3]
+        assert female_pixel[0] > 180
+        assert female_pixel[0] > female_pixel[1]
+        assert female_pixel[0] > female_pixel[2]
+        assert male_pixel[2] > 180
+        assert male_pixel[2] > male_pixel[0]
+        assert male_pixel[2] > male_pixel[1]
+    finally:
+        pygame.quit()
+
+
+def test_menu_renderer_reserves_left_strip_for_player_showcase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    renderer = MenuRenderer(screen, 1280, 720)
+
+    try:
+        showcase_rect = renderer._menu_player_showcase_rect()
+        content_rect = renderer._menu_content_rect()
+
+        assert content_rect.left > showcase_rect.right
+        assert showcase_rect.left == 24
+        assert showcase_rect.width >= 160
+    finally:
+        pygame.quit()
+
+
 def test_renderer_places_freeform_action_trigger_left_of_sidebar(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

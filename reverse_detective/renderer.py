@@ -1364,6 +1364,44 @@ class MenuRenderer(TooltipMixin):
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 15)
         self._init_tooltip_state()
 
+    def _menu_player_showcase_rect(self) -> pygame.Rect:
+        showcase_width = min(212, max(164, self._width // 6))
+        showcase_height = max(420, self._height - 172)
+        return pygame.Rect(24, 120, showcase_width, showcase_height)
+
+    def _menu_content_rect(self) -> pygame.Rect:
+        showcase_rect = self._menu_player_showcase_rect()
+        content_left = showcase_rect.right + 28
+        return pygame.Rect(
+            content_left,
+            0,
+            max(520, self._width - content_left - 48),
+            self._height,
+        )
+
+    def _split_menu_columns(
+        self,
+        content_rect: pygame.Rect,
+        *,
+        left_ratio: float,
+        gap: int = 24,
+        min_left: int = 340,
+        min_right: int = 400,
+        y: int,
+        height: int,
+    ) -> tuple[pygame.Rect, pygame.Rect]:
+        available_width = max(0, content_rect.width - gap)
+        left_width = max(min_left, int(available_width * left_ratio))
+        left_width = min(left_width, max(min_left, available_width - min_right))
+        right_width = max(min_right, available_width - left_width)
+        if left_width + right_width > available_width:
+            left_width = max(min_left, available_width - min_right)
+            right_width = max(min_right, available_width - left_width)
+
+        left_rect = pygame.Rect(content_rect.x, y, left_width, height)
+        right_rect = pygame.Rect(left_rect.right + gap, y, right_width, height)
+        return left_rect, right_rect
+
     def draw_main_menu(
         self,
         background: Any,
@@ -1382,50 +1420,62 @@ class MenuRenderer(TooltipMixin):
         )
         self._draw_chrome(background.game_title, background.game_subtitle, background.operator_name)
 
-        left_panel = pygame.Rect(48, 150, 560, 470)
-        right_panel = pygame.Rect(644, 150, 588, 470)
+        content_rect = self._menu_content_rect()
+        left_panel, right_panel = self._split_menu_columns(
+            content_rect,
+            left_ratio=0.43,
+            min_left=380,
+            min_right=470,
+            y=150,
+            height=470,
+        )
         self._panel(left_panel, (16, 21, 28))
         self._panel(right_panel, (27, 22, 19))
 
         self._blit_clamped_line(
             self._hero_font,
             "案件模拟台",
-            (82, 182),
+            (left_panel.x + 34, left_panel.y + 32),
             (243, 232, 207),
             left_panel.width - 58,
         )
         self._blit_preview_block(
             self._body_font,
             background.menu_intro,
-            (82, 276),
+            (left_panel.x + 34, left_panel.y + 126),
             (232, 235, 239),
             left_panel.width - 58,
             4,
             line_gap=8,
         )
 
-        self._section_title(f"{background.operator_name}的动机", 82, 394)
+        self._section_title(f"{background.operator_name}的动机", left_panel.x + 34, left_panel.y + 244)
         self._blit_preview_block(
             self._small_font,
             background.background,
-            (82, 430),
+            (left_panel.x + 34, left_panel.y + 280),
             (208, 214, 224),
             left_panel.width - 58,
             7,
             line_gap=6,
         )
 
-        self._section_title("主菜单", 674, 188)
+        self._section_title("主菜单", right_panel.x + 30, right_panel.y + 38)
         self._blit_clamped_line(
             self._small_font,
             "先选择你的行动方向，再进入具体卷宗。",
-            (674, 226),
+            (right_panel.x + 30, right_panel.y + 76),
             (224, 225, 232),
-            516,
+            right_panel.width - 60,
         )
 
         for index, option in enumerate(options):
-            option_rect = pygame.Rect(674, 276 + index * 88, 516, 66)
+            option_rect = pygame.Rect(
+                right_panel.x + 30,
+                right_panel.y + 126 + index * 88,
+                right_panel.width - 60,
+                66,
+            )
             selected = index == selected_index
             fill = (228, 193, 127) if selected else (41, 47, 58)
             border = (246, 226, 193) if selected else (103, 113, 126)
@@ -1478,8 +1528,15 @@ class MenuRenderer(TooltipMixin):
         )
         self._draw_chrome(background.game_title, "卷宗选择", background.operator_name)
 
-        left = pygame.Rect(42, 126, 548, 520)
-        right = pygame.Rect(620, 126, 586, 520)
+        content_rect = self._menu_content_rect()
+        left, right = self._split_menu_columns(
+            content_rect,
+            left_ratio=0.44,
+            min_left=400,
+            min_right=450,
+            y=126,
+            height=520,
+        )
         self._panel(left, (17, 22, 28))
         self._panel(right, (25, 21, 18))
 
@@ -1555,7 +1612,8 @@ class MenuRenderer(TooltipMixin):
         )
         self._draw_chrome(background.game_title, "选项设置", background.operator_name)
 
-        panel = pygame.Rect(88, 126, self._width - 176, 520)
+        content_rect = self._menu_content_rect()
+        panel = pygame.Rect(content_rect.x, 126, content_rect.width, 520)
         self._panel(panel, (16, 21, 28))
         self._section_title("运行与 AI 请求设置", panel.x + 24, panel.y + 18)
 
@@ -1668,8 +1726,15 @@ class MenuRenderer(TooltipMixin):
         )
         self._draw_chrome(background.game_title, "自定义剧本", background.operator_name)
 
-        left = pygame.Rect(56, 126, 564, 520)
-        right = pygame.Rect(646, 126, 556, 520)
+        content_rect = self._menu_content_rect()
+        left, right = self._split_menu_columns(
+            content_rect,
+            left_ratio=0.48,
+            min_left=430,
+            min_right=420,
+            y=126,
+            height=520,
+        )
         self._panel(left, (16, 21, 28))
         self._panel(right, (27, 22, 19))
 
@@ -1905,24 +1970,16 @@ class MenuRenderer(TooltipMixin):
         pygame.draw.rect(vignette, (0, 0, 0, 90), vignette.get_rect(), width=52, border_radius=24)
         self._surface.blit(vignette, (0, 0))
 
-        self._draw_operator_portrait_backdrop(operator_portrait_name, operator_portrait_gender)
         self._draw_detective_ui_stamp()
+        self._draw_operator_portrait_backdrop(operator_portrait_name, operator_portrait_gender)
 
     def _draw_operator_portrait_backdrop(
         self,
         operator_portrait_name: str | None,
         operator_portrait_gender: str,
     ) -> None:
-        portrait_width = min(460, max(220, self._width // 3))
-        portrait_height = min(self._height - 118, max(240, int(self._height * 0.8)))
-        portrait_rect = pygame.Rect(
-            self._width - portrait_width - 36,
-            self._height - portrait_height - 36,
-            portrait_width,
-            portrait_height,
-        )
-
-        glow_rect = portrait_rect.inflate(32, 28)
+        showcase_rect = self._menu_player_showcase_rect()
+        glow_rect = showcase_rect.inflate(30, 34)
         glow_surface = pygame.Surface(glow_rect.size, pygame.SRCALPHA)
         pygame.draw.ellipse(
             glow_surface,
@@ -1931,6 +1988,17 @@ class MenuRenderer(TooltipMixin):
         )
         self._surface.blit(glow_surface, glow_rect.topleft)
 
+        frame_surface = pygame.Surface(showcase_rect.size, pygame.SRCALPHA)
+        pygame.draw.rect(frame_surface, (10, 15, 21, 214), frame_surface.get_rect(), border_radius=28)
+        pygame.draw.rect(frame_surface, (201, 169, 111, 126), frame_surface.get_rect(), width=2, border_radius=28)
+        self._surface.blit(frame_surface, showcase_rect.topleft)
+
+        portrait_rect = pygame.Rect(
+            showcase_rect.x + 12,
+            showcase_rect.y + 14,
+            showcase_rect.width - 24,
+            showcase_rect.height - 108,
+        )
         portrait_surface = self._load_menu_portrait_surface(
             operator_portrait_gender,
             portrait_rect.size,
@@ -1939,17 +2007,33 @@ class MenuRenderer(TooltipMixin):
         if portrait_surface is not None:
             toned = portrait_surface.copy()
             shade = pygame.Surface(toned.get_size(), pygame.SRCALPHA)
-            shade.fill((8, 12, 18, 158))
+            shade.fill((8, 12, 18, 62))
             toned.blit(shade, (0, 0))
-            toned.set_alpha(170)
+            toned.set_alpha(244)
             self._surface.blit(toned, portrait_rect.topleft)
         else:
             self._draw_portrait_placeholder(portrait_rect, operator_portrait_gender)
 
-        fade_surface = pygame.Surface(portrait_rect.size, pygame.SRCALPHA)
-        fade_surface.fill((0, 0, 0, 0))
-        pygame.draw.rect(fade_surface, (10, 14, 18, 118), fade_surface.get_rect(), border_radius=28)
-        self._surface.blit(fade_surface, portrait_rect.topleft)
+        label_surface = pygame.Surface((showcase_rect.width - 24, 84), pygame.SRCALPHA)
+        pygame.draw.rect(label_surface, (8, 12, 18, 172), label_surface.get_rect(), border_radius=18)
+        label_rect = label_surface.get_rect(midbottom=(showcase_rect.centerx, showcase_rect.bottom - 16))
+        self._surface.blit(label_surface, label_rect)
+
+        self._blit_clamped_line(
+            self._small_font,
+            "主控档案",
+            (label_rect.x + 14, label_rect.y + 12),
+            (241, 226, 194),
+            label_rect.width - 28,
+        )
+        portrait_label = operator_portrait_name or ("女主控" if operator_portrait_gender == "female" else "男主控")
+        self._blit_clamped_line(
+            self._small_font,
+            portrait_label,
+            (label_rect.x + 14, label_rect.y + 38),
+            (217, 222, 230),
+            label_rect.width - 28,
+        )
 
     def _draw_portrait_placeholder(self, portrait_rect: pygame.Rect, operator_portrait_gender: str) -> None:
         silhouette = pygame.Surface(portrait_rect.size, pygame.SRCALPHA)
@@ -1996,25 +2080,27 @@ class MenuRenderer(TooltipMixin):
         size: tuple[int, int],
         *hint_texts: str,
     ) -> pygame.Surface | None:
-        for asset_ref in self._menu_portrait_candidates(operator_portrait_gender):
-            surface = self._load_menu_asset_surface("npc", asset_ref, size, *hint_texts)
+        for asset_kind, asset_ref in self._menu_portrait_candidates(operator_portrait_gender):
+            surface = self._load_menu_asset_surface(asset_kind, asset_ref, size, *hint_texts)
             if surface is not None:
                 return surface
         return None
 
-    def _menu_portrait_candidates(self, operator_portrait_gender: str) -> tuple[str, ...]:
+    def _menu_portrait_candidates(self, operator_portrait_gender: str) -> tuple[tuple[str, str], ...]:
         if operator_portrait_gender == "female":
             return (
-                "menu_player_female.png",
-                "female_detective.png",
-                "female_suspect.png",
-                "woman_green.png",
+                ("character", "1.png"),
+                ("npc", "menu_player_female.png"),
+                ("npc", "female_detective.png"),
+                ("npc", "female_suspect.png"),
+                ("npc", "woman_green.png"),
             )
         return (
-            "menu_player_male.png",
-            "detective.png",
-            "man_blue.png",
-            "assistant.png",
+            ("character", "2.png"),
+            ("npc", "menu_player_male.png"),
+            ("npc", "detective.png"),
+            ("npc", "man_blue.png"),
+            ("npc", "assistant.png"),
         )
 
     def _load_menu_asset_surface(
