@@ -257,6 +257,58 @@ def test_menu_renderer_uses_gendered_character_assets(
         pygame.quit()
 
 
+def test_renderer_preserves_character_aspect_ratio_when_scaling(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    _write_asset_image(tmp_path / "character" / "2.png", (44, 118, 228), (20, 80))
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+
+    try:
+        surface = renderer._load_player_surface("male", (48, 48), "player")
+        assert surface is not None
+        assert surface.get_at((2, 24))[3] == 0
+        center_pixel = surface.get_at((24, 24))[:3]
+        assert center_pixel[2] > center_pixel[0]
+        assert center_pixel[2] > center_pixel[1]
+    finally:
+        pygame.quit()
+
+
+def test_menu_renderer_preserves_character_aspect_ratio_when_scaling(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    _write_asset_image(tmp_path / "character" / "1.png", (220, 44, 72), (20, 80))
+    renderer = MenuRenderer(screen, 1280, 720, asset_root=tmp_path)
+
+    try:
+        surface = renderer._load_menu_portrait_surface("female", (48, 48), "player")
+        assert surface is not None
+        assert surface.get_at((2, 24))[3] == 0
+        center_pixel = surface.get_at((24, 24))[:3]
+        assert center_pixel[0] > center_pixel[1]
+        assert center_pixel[0] > center_pixel[2]
+    finally:
+        pygame.quit()
+
+
 def test_menu_renderer_reserves_left_strip_for_player_showcase(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

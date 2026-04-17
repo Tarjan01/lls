@@ -1249,7 +1249,14 @@ class Renderer(TooltipMixin):
             else:
                 loaded = loaded.convert()
             if loaded.get_size() != size:
-                loaded = pygame.transform.smoothscale(loaded, size)
+                if asset_kind == "background":
+                    loaded = pygame.transform.smoothscale(loaded, size)
+                else:
+                    loaded = _fit_surface_to_box(
+                        loaded,
+                        size,
+                        align_bottom=asset_kind in {"npc", "character"},
+                    )
         except Exception:
             return None
 
@@ -1480,6 +1487,30 @@ def _lerp_color(left: Color, right: Color, ratio: float) -> Color:
 
 def _tint(color: Color, delta: int) -> Color:
     return tuple(max(0, min(255, channel + delta)) for channel in color)
+
+
+def _fit_surface_to_box(
+    surface: pygame.Surface,
+    size: tuple[int, int],
+    *,
+    align_bottom: bool = False,
+) -> pygame.Surface:
+    target_width, target_height = size
+    source_width, source_height = surface.get_size()
+    if target_width <= 0 or target_height <= 0 or source_width <= 0 or source_height <= 0:
+        return surface
+
+    ratio = min(target_width / source_width, target_height / source_height)
+    scaled_size = (
+        max(1, int(round(source_width * ratio))),
+        max(1, int(round(source_height * ratio))),
+    )
+    scaled = pygame.transform.smoothscale(surface, scaled_size)
+    canvas = pygame.Surface(size, pygame.SRCALPHA)
+    offset_x = (target_width - scaled_size[0]) // 2
+    offset_y = target_height - scaled_size[1] if align_bottom else (target_height - scaled_size[1]) // 2
+    canvas.blit(scaled, (offset_x, offset_y))
+    return canvas
 
 
 class MenuRenderer(TooltipMixin):
@@ -2266,7 +2297,14 @@ class MenuRenderer(TooltipMixin):
             else:
                 loaded = loaded.convert()
             if loaded.get_size() != size:
-                loaded = pygame.transform.smoothscale(loaded, size)
+                if asset_kind == "background":
+                    loaded = pygame.transform.smoothscale(loaded, size)
+                else:
+                    loaded = _fit_surface_to_box(
+                        loaded,
+                        size,
+                        align_bottom=asset_kind in {"npc", "character"},
+                    )
         except Exception:
             return None
 
