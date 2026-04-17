@@ -123,7 +123,7 @@ def test_game_app_can_browse_text_history_while_loading(
         pygame.quit()
 
 
-def test_game_app_routes_arrow_keys_to_selected_text_panel(
+def test_game_app_routes_page_keys_to_selected_text_panel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
@@ -141,10 +141,142 @@ def test_game_app_routes_arrow_keys_to_selected_text_panel(
     app._game_renderer.scroll_selected_text = fake_scroll  # type: ignore[method-assign]
 
     try:
-        app._handle_keydown(pygame.K_DOWN)
-        app._handle_keydown(pygame.K_UP)
+        app._handle_keydown(pygame.K_PAGEDOWN)
+        app._handle_keydown(pygame.K_PAGEUP)
 
-        assert scrolled == [1, -1]
+        assert scrolled == [6, -6]
+    finally:
+        pygame.quit()
+
+
+def test_game_app_tabs_between_panels_and_opens_freeform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    triggered: list[str] = []
+    premise = build_default_premise()
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "焦点切换测试",
+            },
+            "npcs": [],
+            "interactables": [
+                {
+                    "id": "target_window",
+                    "name": "观察点",
+                    "image": "window.png",
+                    "position": [640, 280],
+                    "state": {
+                        "opened": False,
+                        "locked": False,
+                        "hidden": False,
+                        "disabled": False,
+                    },
+                    "options": [
+                        {
+                            "label": "继续观察",
+                            "action_id": "wait",
+                            "resolution_mode": "local_rule",
+                            "local_logic": {
+                                "requires_state": {},
+                                "set_state": {},
+                                "success_text": "你继续观察了片刻。",
+                                "failure_text": "这里暂时没有更多变化。",
+                            },
+                        }
+                    ],
+                }
+            ],
+            "narrative": "用于测试 Tab 在三区之间切换焦点。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    def fake_begin_freeform_action_input() -> None:
+        triggered.append("freeform")
+
+    app._begin_freeform_action_input = fake_begin_freeform_action_input  # type: ignore[method-assign]
+    app._premise = premise
+    app._session = GameSessionState.create(premise)
+    app._session.finish_initial_scene(scene)
+    app._session.set_active_interactable("target_window")
+    app._mode = "game"
+    app._ensure_valid_game_panel_focus()
+
+    try:
+        app._game_renderer.draw(
+            app._session,
+            "Mock Story",
+            0.0,
+            premise.player_display_name,
+            premise.story_title,
+            panel_focus=app._game_panel_focus,
+        )
+
+        assert app._game_panel_focus == "options"
+
+        app._handle_game_keydown(pygame.K_TAB)
+        assert app._game_panel_focus == "sidebar"
+
+        app._handle_game_keydown(pygame.K_TAB)
+        assert app._game_panel_focus == "freeform"
+
+        app._handle_game_keydown(pygame.K_RETURN)
+        assert triggered == ["freeform"]
+    finally:
+        pygame.quit()
+
+
+def test_game_app_clicks_hud_sidebar_and_switches_focus(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    premise = build_default_premise()
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "侧边栏点击测试",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "点击右下侧边栏后应选中文本并切换焦点。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    app._premise = premise
+    app._session = GameSessionState.create(premise)
+    app._session.finish_initial_scene(scene)
+    app._mode = "game"
+
+    try:
+        app._game_renderer.draw(
+            app._session,
+            "Mock Story",
+            0.0,
+            premise.player_display_name,
+            premise.story_title,
+            panel_focus=app._game_panel_focus,
+        )
+
+        sidebar_rect = app._game_renderer._hud_sidebar_targets[0].rect
+        app._handle_mousebuttondown(1, sidebar_rect.center)
+
+        assert app._game_panel_focus == "sidebar"
+        assert app._game_renderer.has_selected_text() is True
     finally:
         pygame.quit()
 

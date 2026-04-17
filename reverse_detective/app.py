@@ -77,6 +77,7 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
 
 MenuMode = Literal["main_menu", "story_browser", "settings", "custom_story", "game"]
 BrowserFocus = Literal["story", "role"]
+GamePanelFocus = Literal["options", "sidebar", "freeform"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,6 +188,7 @@ class GameApp:
         self._custom_story_index = 0
         self._input_editor: TextInputSession | None = None
         self._status_text: str | None = None
+        self._game_panel_focus: GamePanelFocus = "options"
         self._settings_draft = SettingsDraft.from_config(
             config,
             load_api_key(config.ai.credentials_path, config.ai.provider),
@@ -293,8 +295,17 @@ class GameApp:
             if self._mode == "game":
                 action = self._game_renderer.consume_action_click(position)
                 if action == "open_freeform_action":
+                    self._game_panel_focus = "freeform"
                     self._begin_freeform_action_input()
                     return
+                if action is not None and action.startswith("select_sidebar:"):
+                    try:
+                        sidebar_index = int(action.split(":", 1)[1])
+                    except ValueError:
+                        sidebar_index = -1
+                    if self._game_renderer.select_hud_sidebar_section(sidebar_index):
+                        self._game_panel_focus = "sidebar"
+                        return
             renderer = self._active_text_renderer()
             if renderer is not None and renderer.handle_text_selection_click(position):
                 return
@@ -318,10 +329,11 @@ class GameApp:
         if key == pygame.K_ESCAPE:
             renderer.clear_selected_text()
             return True
-        if key == pygame.K_UP:
-            return renderer.scroll_selected_text(-1)
-        if key == pygame.K_DOWN:
-            return renderer.scroll_selected_text(1)
+        if self._mode != "game":
+            if key == pygame.K_UP:
+                return renderer.scroll_selected_text(-1)
+            if key == pygame.K_DOWN:
+                return renderer.scroll_selected_text(1)
         if key == pygame.K_PAGEUP:
             return renderer.scroll_selected_text(-6)
         if key == pygame.K_PAGEDOWN:
@@ -699,6 +711,52 @@ class GameApp:
         if resolution.requires_immediate_ai:
             self._submit_settlement_request(request_type="freeform_action")
 
+    def _available_game_panels(self) -> tuple[GamePanelFocus, ...]:
+        if self._mode != "game" or self._session is None:
+            return ()
+
+        panels: list[GamePanelFocus] = []
+        active_interactable = self._session.active_interactable
+        if (
+            not self._session.loading
+            and not self._session.current_scene.is_terminal
+            and not self._session.needs_settlement
+            and active_interactable is not None
+            and self._session.available_options_for(active_interactable)
+        ):
+            panels.append("options")
+        panels.append("sidebar")
+        if not self._session.loading and not self._session.current_scene.is_terminal:
+            panels.append("freeform")
+        return tuple(panels)
+
+    def _ensure_valid_game_panel_focus(self) -> None:
+        panels = self._available_game_panels()
+        if not panels:
+            self._game_panel_focus = "sidebar"
+            return
+        if self._game_panel_focus not in panels:
+            self._game_panel_focus = panels[0]
+        if self._game_panel_focus == "sidebar":
+            self._game_renderer.ensure_hud_sidebar_selection()
+
+    def _cycle_game_panel_focus(self, direction: int) -> bool:
+        panels = self._available_game_panels()
+        if not panels:
+            self._game_panel_focus = "sidebar"
+            return False
+
+        try:
+            current_index = panels.index(self._game_panel_focus)
+        except ValueError:
+            current_index = -1
+
+        next_index = (current_index + direction) % len(panels)
+        self._game_panel_focus = panels[next_index]
+        if self._game_panel_focus == "sidebar":
+            self._game_renderer.ensure_hud_sidebar_selection()
+        return True
+
     def _handle_game_keydown(self, key: int) -> None:
         if key == pygame.K_m:
             self._return_to_main_menu("已返回主菜单")
@@ -711,7 +769,15 @@ class GameApp:
         if self._mode != "game" or self._session is None:
             return
 
+        self._ensure_valid_game_panel_focus()
+
+        if key == pygame.K_TAB:
+            direction = -1 if (pygame.key.get_mods() & pygame.KMOD_SHIFT) else 1
+            self._cycle_game_panel_focus(direction)
+            return
+
         if key == pygame.K_c:
+            self._game_panel_focus = "freeform"
             self._begin_freeform_action_input()
             return
 
@@ -728,6 +794,22 @@ class GameApp:
                 return
 
         if self._session.loading or self._session.current_scene.is_terminal or self._session.needs_settlement:
+            return
+
+        if self._game_panel_focus == "sidebar":
+            if key == pygame.K_UP:
+                self._game_renderer.cycle_hud_sidebar_selection(-1)
+                return
+            if key == pygame.K_DOWN:
+                self._game_renderer.cycle_hud_sidebar_selection(1)
+                return
+            if key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._game_renderer.ensure_hud_sidebar_selection()
+                return
+
+        if self._game_panel_focus == "freeform":
+            if key in (pygame.K_RETURN, pygame.K_SPACE):
+                self._begin_freeform_action_input()
             return
 
         if key == pygame.K_UP:
@@ -812,6 +894,7 @@ class GameApp:
             else:
                 self._session.finish_settlement(result.scene)
                 self._audio.play_success("round_settled", result.scene.scene.bgm)
+            self._ensure_valid_game_panel_focus()
 
     def _update_active_interactable(self) -> None:
         if self._mode != "game" or self._session is None:
@@ -823,6 +906,7 @@ class GameApp:
             or self._session.needs_settlement
         ):
             self._session.set_active_interactable(None)
+            self._ensure_valid_game_panel_focus()
             return
 
         player_rect = self._player_rect()
@@ -843,6 +927,7 @@ class GameApp:
                 best_match = (distance, interactable.id)
 
         self._session.set_active_interactable(None if best_match is None else best_match[1])
+        self._ensure_valid_game_panel_focus()
 
     def _player_rect(self) -> pygame.Rect:
         if self._session is None:
@@ -1058,6 +1143,7 @@ class GameApp:
             self._premise.player_display_name,
             self._premise.story_title,
             player_avatar_gender=runtime_avatar_gender,
+            panel_focus=self._game_panel_focus,
         )
 
     def _enter_story_browser(self) -> None:
@@ -1088,6 +1174,7 @@ class GameApp:
         self._session = GameSessionState.create(self._premise)
         self._elapsed_seconds = 0.0
         self._mode = "game"
+        self._game_panel_focus = "options"
         cached_scene = self._ai_client.load_cached_initial_scene(self._premise)
         if cached_scene is not None:
             self._session.finish_initial_scene(cached_scene)

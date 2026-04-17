@@ -253,8 +253,10 @@ def test_renderer_places_freeform_action_trigger_left_of_sidebar(
     try:
         renderer.draw(session, "Live API", 0.0, "玩家", "演示卷宗")
 
-        assert len(renderer._action_targets) == 1
-        action_rect = renderer._action_targets[0].rect
+        freeform_target = next(
+            target for target in renderer._action_targets if target.action == "open_freeform_action"
+        )
+        action_rect = freeform_target.rect
         sidebar_left = renderer._width - 266
 
         assert renderer.consume_action_click(action_rect.center) == "open_freeform_action"

@@ -79,22 +79,22 @@ class TooltipMixin:
         *,
         selected: bool = False,
         preferred_width: int = 360,
-    ) -> None:
+    ) -> TooltipTarget | None:
         cleaned = text.strip()
         if not cleaned:
-            return
+            return None
         key = self._tooltip_key(rect, cleaned)
-        self._tooltip_targets.append(
-            TooltipTarget(
-                rect.copy(),
-                cleaned,
-                key=key,
-                selected=selected,
-                preferred_width=preferred_width,
-            )
+        target = TooltipTarget(
+            rect.copy(),
+            cleaned,
+            key=key,
+            selected=selected,
+            preferred_width=preferred_width,
         )
+        self._tooltip_targets.append(target)
         if self._selected_text_key == key:
             self._selected_text_preferred_width = preferred_width
+        return target
 
     def has_selected_text(self) -> bool:
         return bool(self._selected_text_content)
@@ -112,11 +112,7 @@ class TooltipMixin:
             None,
         )
         if target is not None:
-            self._selected_text_key = target.key
-            self._selected_text_content = target.text
-            self._selected_text_preferred_width = target.preferred_width
-            self._selected_text_scroll = 0
-            self._selected_text_max_scroll = 0
+            self._activate_tooltip_target(target)
             return True
 
         if self._selected_text_panel_rect is not None and self._selected_text_panel_rect.collidepoint(position):
@@ -127,6 +123,13 @@ class TooltipMixin:
             return True
 
         return False
+
+    def _activate_tooltip_target(self, target: TooltipTarget) -> None:
+        self._selected_text_key = target.key
+        self._selected_text_content = target.text
+        self._selected_text_preferred_width = target.preferred_width
+        self._selected_text_scroll = 0
+        self._selected_text_max_scroll = 0
 
     def scroll_selected_text(self, delta_lines: int) -> bool:
         if not self.has_selected_text():
@@ -359,6 +362,7 @@ class Renderer(TooltipMixin):
         self._body_font = pygame.font.SysFont("microsoftyaheiui", 20)
         self._small_font = pygame.font.SysFont("microsoftyaheiui", 16)
         self._action_targets: list[UiActionTarget] = []
+        self._hud_sidebar_targets: list[TooltipTarget] = []
         self._init_tooltip_state()
 
     def draw(
@@ -370,13 +374,15 @@ class Renderer(TooltipMixin):
         story_title: str,
         *,
         player_avatar_gender: str = "male",
+        panel_focus: str = "sidebar",
     ) -> None:
         self._begin_tooltip_frame()
         self._action_targets = []
+        self._hud_sidebar_targets = []
         scene = session.current_scene
         self._draw_background(scene)
         self._draw_world(scene, session, elapsed_seconds, player_label, player_avatar_gender)
-        self._draw_hud(scene, session, mode_label, story_title)
+        self._draw_hud(scene, session, mode_label, story_title, panel_focus=panel_focus)
 
         active_interactable = session.active_interactable
         if (
@@ -391,6 +397,7 @@ class Renderer(TooltipMixin):
                     active_interactable,
                     options,
                     session.selected_option_index,
+                    focused=panel_focus == "options",
                 )
 
         if session.error_message:
@@ -410,6 +417,48 @@ class Renderer(TooltipMixin):
             if target.rect.collidepoint(position):
                 return target.action
         return None
+
+    def select_hud_sidebar_section(self, index: int) -> bool:
+        if not self._hud_sidebar_targets:
+            return False
+        if index < 0 or index >= len(self._hud_sidebar_targets):
+            return False
+        self._activate_tooltip_target(self._hud_sidebar_targets[index])
+        return True
+
+    def cycle_hud_sidebar_selection(self, delta: int) -> bool:
+        if not self._hud_sidebar_targets:
+            return False
+        selected_index = next(
+            (
+                index
+                for index, target in enumerate(self._hud_sidebar_targets)
+                if target.key == self._selected_text_key
+            ),
+            None,
+        )
+        if selected_index is None:
+            selected_index = 0 if delta >= 0 else len(self._hud_sidebar_targets) - 1
+        else:
+            selected_index = (selected_index + delta) % len(self._hud_sidebar_targets)
+        return self.select_hud_sidebar_section(selected_index)
+
+    def ensure_hud_sidebar_selection(self) -> bool:
+        if not self._hud_sidebar_targets:
+            return False
+        if self.selected_hud_sidebar_index() is not None:
+            return True
+        return self.select_hud_sidebar_section(0)
+
+    def selected_hud_sidebar_index(self) -> int | None:
+        return next(
+            (
+                index
+                for index, target in enumerate(self._hud_sidebar_targets)
+                if target.key == self._selected_text_key
+            ),
+            None,
+        )
 
     def _register_action_target(self, rect: pygame.Rect, action: str) -> None:
         self._action_targets.append(UiActionTarget(rect=rect.copy(), action=action))
@@ -544,6 +593,8 @@ class Renderer(TooltipMixin):
         session: GameSessionState,
         mode_label: str,
         story_title: str,
+        *,
+        panel_focus: str = "sidebar",
     ) -> None:
         hud_rect = pygame.Rect(0, self._hud_top, self._width, self._height - self._hud_top)
         pygame.draw.rect(self._surface, (13, 16, 23), hud_rect)
@@ -571,13 +622,19 @@ class Renderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "移动: WASD | 交互: 上下切选项 / Enter / Space | C 自由行动 | 关键决策: 选择标记为 [即时AI] 的选项",
+            "移动: WASD | Tab 切换右上/右下/左下区域 | 当前焦点区用上下与 Enter / Space 操作",
             (36, self._hud_top + 84),
             (231, 208, 166),
             760,
         )
 
-        self._draw_hud_sidebar_tabs(scene, session, mode_label, story_title)
+        self._draw_hud_sidebar_tabs(
+            scene,
+            session,
+            mode_label,
+            story_title,
+            panel_focus=panel_focus,
+        )
 
         if session.can_force_settle and not session.loading and not scene.is_terminal:
             self._blit_clamped_line(
@@ -594,10 +651,18 @@ class Renderer(TooltipMixin):
         session: GameSessionState,
         mode_label: str,
         story_title: str,
+        *,
+        panel_focus: str = "sidebar",
     ) -> None:
         rail_rect = pygame.Rect(self._width - 266, self._hud_top + 18, 232, self._height - self._hud_top - 36)
         pygame.draw.rect(self._surface, (17, 21, 29), rail_rect, border_radius=22)
-        pygame.draw.rect(self._surface, (94, 109, 128), rail_rect, width=2, border_radius=22)
+        pygame.draw.rect(
+            self._surface,
+            (242, 210, 168) if panel_focus == "sidebar" else (94, 109, 128),
+            rail_rect,
+            width=2,
+            border_radius=22,
+        )
 
         archive_lines = [
             f"{entry.title}\n{entry.body}"
@@ -638,7 +703,7 @@ class Renderer(TooltipMixin):
         ]
 
         row_y = rail_rect.y + 18
-        for label, body, accent in sections:
+        for index, (label, body, accent) in enumerate(sections):
             row_rect = pygame.Rect(rail_rect.x + 16, row_y, rail_rect.width - 32, 34)
             tab_key = self._tooltip_key(row_rect, body)
             is_selected = self._selected_text_key == tab_key
@@ -654,12 +719,26 @@ class Renderer(TooltipMixin):
                 text_color,
                 row_rect.width - 24,
             )
-            self._register_tooltip(row_rect, body, selected=is_selected, preferred_width=520)
+            target = self._register_tooltip(row_rect, body, selected=is_selected, preferred_width=520)
+            if target is not None:
+                self._hud_sidebar_targets.append(target)
+            self._register_action_target(row_rect, f"select_sidebar:{index}")
             row_y += 42
 
         action_rect = pygame.Rect(36, self._hud_top + 110, 320, 52)
-        pygame.draw.rect(self._surface, (108, 70, 52), action_rect, border_radius=14)
-        pygame.draw.rect(self._surface, (242, 210, 168), action_rect, width=2, border_radius=14)
+        pygame.draw.rect(
+            self._surface,
+            (136, 88, 64) if panel_focus == "freeform" else (108, 70, 52),
+            action_rect,
+            border_radius=14,
+        )
+        pygame.draw.rect(
+            self._surface,
+            (247, 221, 184) if panel_focus == "freeform" else (242, 210, 168),
+            action_rect,
+            width=2,
+            border_radius=14,
+        )
         self._blit_clamped_line(
             self._small_font,
             "自由行动",
@@ -686,12 +765,20 @@ class Renderer(TooltipMixin):
         interactable: Interactable,
         options: tuple[ActionOption, ...],
         selected_index: int,
+        *,
+        focused: bool = False,
     ) -> None:
         popup_width = 400
         popup_height = 56 + len(options) * 40
         popup_rect = pygame.Rect(self._width - popup_width - 28, 26, popup_width, popup_height)
         pygame.draw.rect(self._surface, (12, 16, 24), popup_rect, border_radius=18)
-        pygame.draw.rect(self._surface, (120, 135, 166), popup_rect, width=2, border_radius=18)
+        pygame.draw.rect(
+            self._surface,
+            (242, 210, 168) if focused else (120, 135, 166),
+            popup_rect,
+            width=2,
+            border_radius=18,
+        )
 
         self._blit_clamped_line(
             self._title_font,
