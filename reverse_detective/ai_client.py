@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 import json
 from pathlib import Path
 from queue import Empty, Queue
@@ -73,6 +74,8 @@ LIVE_WORLD_Y_RANGE = (140, LIVE_WORLD_HEIGHT - 68)
 LIVE_NORMALIZED_COORDINATE_MAX = 120
 ACTION_POINTS_PER_SETTLEMENT = 5
 LIVE_RETRYABLE_REASONS = ("xhigh", "high", "medium", "low")
+INITIAL_SCENE_CACHE_VERSION = 1
+DEFAULT_INITIAL_SCENE_CACHE_ROOT = Path("~/.reverse_detective/cache/initial_scenes").expanduser()
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,12 +94,20 @@ class AIClientError(RuntimeError):
 class ReverseDetectiveAIClient:
     """Facade for live OpenAI-compatible requests with a local mock fallback."""
 
-    def __init__(self, config: AIConfig, asset_root: Path | None = None):
+    def __init__(
+        self,
+        config: AIConfig,
+        asset_root: Path | None = None,
+        cache_root: Path | None = None,
+    ):
         self._config = config
         self._mock_engine = _MockStoryEngine()
         self._api_key = self._load_api_key(config.credentials_path)
         self._live_enabled = bool(config.base_url and config.model and self._api_key)
         self._last_mode_label = "Live API" if self._live_enabled else "Mock Story"
+        self._initial_scene_cache_root = (cache_root or DEFAULT_INITIAL_SCENE_CACHE_ROOT).expanduser()
+        self._prefetch_lock = threading.Lock()
+        self._prefetch_inflight: set[str] = set()
 
         if not self._live_enabled and not config.use_mock_when_unconfigured:
             raise AIClientError(
@@ -117,7 +128,7 @@ class ReverseDetectiveAIClient:
             pass
 
     def generate_initial_scene(self, premise: StoryPremise) -> SceneState:
-        return self._generate_scene(
+        scene = self._generate_scene(
             AIRequestPayload(
                 request_type="initial_scene",
                 premise=premise,
@@ -126,6 +137,60 @@ class ReverseDetectiveAIClient:
                 recent_actions=(),
             )
         )
+        self._write_initial_scene_cache(premise, scene)
+        return scene
+
+    def load_cached_initial_scene(self, premise: StoryPremise) -> SceneState | None:
+        cache_path = self._initial_scene_cache_path(premise)
+        if not cache_path.exists():
+            return None
+
+        try:
+            payload = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        if not isinstance(payload, dict):
+            return None
+
+        scene_payload = payload.get("scene")
+        if not isinstance(scene_payload, dict):
+            return None
+
+        try:
+            scene = load_scene_payload(scene_payload)
+        except Exception:
+            return None
+
+        source_label = payload.get("source_mode")
+        if isinstance(source_label, str) and source_label.strip():
+            self._last_mode_label = source_label.strip()
+        else:
+            self._last_mode_label = "Cached Live API" if self._live_enabled else "Cached Mock Story"
+        return scene
+
+    def prefetch_initial_scene(self, premise: StoryPremise, *, force: bool = False) -> bool:
+        cache_key = self._initial_scene_cache_key(premise)
+        cache_path = self._initial_scene_cache_path(premise)
+        with self._prefetch_lock:
+            if cache_key in self._prefetch_inflight:
+                return False
+            if cache_path.exists() and not force:
+                return False
+            self._prefetch_inflight.add(cache_key)
+
+        def worker() -> None:
+            try:
+                if force or not cache_path.exists():
+                    self.generate_initial_scene(premise)
+            except Exception:
+                return
+            finally:
+                with self._prefetch_lock:
+                    self._prefetch_inflight.discard(cache_key)
+
+        threading.Thread(target=worker, daemon=True).start()
+        return True
 
     def settle_round(
         self,
@@ -564,6 +629,42 @@ class ReverseDetectiveAIClient:
                 return value.strip()
 
         return None
+
+    def _initial_scene_cache_key(self, premise: StoryPremise) -> str:
+        cache_descriptor = {
+            "version": INITIAL_SCENE_CACHE_VERSION,
+            "mode": "live" if self._live_enabled else "mock",
+            "provider": self._config.provider,
+            "base_url": self._config.base_url,
+            "model": self._config.model,
+            "story_id": premise.story_id,
+            "role_id": premise.player_role_id,
+            "premise": _premise_to_dict(premise),
+        }
+        serialized = json.dumps(cache_descriptor, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    def _initial_scene_cache_path(self, premise: StoryPremise) -> Path:
+        return self._initial_scene_cache_root / f"{self._initial_scene_cache_key(premise)}.json"
+
+    def _write_initial_scene_cache(self, premise: StoryPremise, scene: SceneState) -> None:
+        cache_path = self._initial_scene_cache_path(premise)
+        payload = {
+            "cache_version": INITIAL_SCENE_CACHE_VERSION,
+            "story_id": premise.story_id,
+            "role_id": premise.player_role_id,
+            "model": self._config.model,
+            "source_mode": "Cached Live API" if self._live_enabled else "Cached Mock Story",
+            "scene": scene_to_dict(scene),
+        }
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            return
 
 
 def build_default_premise() -> StoryPremise:

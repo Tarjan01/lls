@@ -168,6 +168,7 @@ class GameApp:
             config.display.height,
         )
         self._ai_client = self._build_ai_client(config.ai)
+        self._schedule_initial_scene_prefetch()
 
     def run(self) -> None:
         try:
@@ -582,6 +583,7 @@ class GameApp:
 
     def _draw(self) -> None:
         if self._mode == "main_menu":
+            self._schedule_initial_scene_prefetch()
             self._menu_renderer.draw_main_menu(
                 self._background,
                 list(MAIN_MENU_OPTIONS),
@@ -591,6 +593,7 @@ class GameApp:
             return
 
         if self._mode == "story_browser":
+            self._schedule_initial_scene_prefetch()
             self._menu_renderer.draw_story_browser(
                 self._background,
                 self.current_story,
@@ -645,6 +648,15 @@ class GameApp:
         self._session = GameSessionState.create(self._premise)
         self._elapsed_seconds = 0.0
         self._mode = "game"
+        cached_scene = self._ai_client.load_cached_initial_scene(self._premise)
+        if cached_scene is not None:
+            self._session.finish_initial_scene(cached_scene)
+            self._session.record_system_text(
+                "本地预生成",
+                "已从本地缓存载入预生成的初始场景。",
+            )
+            return
+
         self._submit_initial_request()
 
     def _return_to_main_menu(self, status_text: str | None = None) -> None:
@@ -664,6 +676,7 @@ class GameApp:
         bounded = new_index % len(self._stories)
         self._menu_selection = MenuSelection(story_index=bounded, role_index=0)
         self._detail_modal = None
+        self._schedule_initial_scene_prefetch()
 
     def _select_role(self, new_index: int) -> None:
         roles = self.current_story.roles
@@ -673,6 +686,7 @@ class GameApp:
             role_index=bounded,
         )
         self._detail_modal = None
+        self._schedule_initial_scene_prefetch()
 
     def _open_detail_modal(self) -> None:
         if self._story_focus == "story":
@@ -838,6 +852,19 @@ class GameApp:
             )
             self._status_text = f"AI 配置不可用，已临时回退到本地 Mock：{exc}"
             return ReverseDetectiveAIClient(fallback)
+
+    def _schedule_initial_scene_prefetch(self, *, force: bool = False) -> None:
+        if not self._can_background_prefetch_initial_scene():
+            return
+        premise = build_story_premise(self.current_story, self.current_role.id)
+        self._ai_client.prefetch_initial_scene(premise, force=force)
+
+    def _can_background_prefetch_initial_scene(self) -> bool:
+        try:
+            driver = pygame.display.get_driver()
+        except pygame.error:
+            return False
+        return driver != "dummy"
 
     def _field_label(self, field_name: str) -> str:
         for candidate_name, label, _ in SETTINGS_FIELDS:

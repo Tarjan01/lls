@@ -29,7 +29,7 @@ def _build_config(tmp_path: Path, **overrides: object) -> AIConfig:
 
 
 def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 
     scene = client.generate_initial_scene(build_default_premise())
 
@@ -39,7 +39,7 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
 
 
 def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
     premise = build_default_premise()
 
     scene = client.generate_initial_scene(premise)
@@ -67,7 +67,7 @@ def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
 
 
 def test_extract_response_content_reads_output_text(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 
     class FakeResponse:
         output_text = '{"scene": {}}'
@@ -76,7 +76,7 @@ def test_extract_response_content_reads_output_text(tmp_path: Path) -> None:
 
 
 def test_extract_response_content_prefers_streamed_text(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 
     class FakeResponse:
         output_text = ""
@@ -89,7 +89,8 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
         _build_config(
             tmp_path,
             base_url="https://apikey.soxio.me/openai",
-        )
+        ),
+        cache_root=tmp_path / "cache",
     )
     premise = build_default_premise()
 
@@ -164,7 +165,8 @@ def test_live_scene_uses_streaming_responses_api(
             use_mock_when_unconfigured=False,
             fallback_to_mock_on_error=False,
             credentials_path=credentials_path,
-        )
+        ),
+        cache_root=tmp_path / "cache",
     )
 
     try:
@@ -229,7 +231,8 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
             use_mock_when_unconfigured=False,
             fallback_to_mock_on_error=False,
             credentials_path=credentials_path,
-        )
+        ),
+        cache_root=tmp_path / "cache",
     )
 
     try:
@@ -243,7 +246,7 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
 
 
 def test_consume_response_stream_does_not_require_response_completed(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path))
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
     client._try_parse_streamed_scene = lambda _: None  # type: ignore[method-assign]
 
     class FakeEvent:
@@ -274,7 +277,8 @@ def test_live_scene_retries_once_after_timeout_then_succeeds(tmp_path: Path) -> 
             use_mock_when_unconfigured=False,
             fallback_to_mock_on_error=False,
             credentials_path=credentials_path,
-        )
+        ),
+        cache_root=tmp_path / "cache",
     )
     attempts: list[tuple[str, float]] = []
     scene = load_scene_payload(
@@ -307,7 +311,10 @@ def test_live_scene_retries_once_after_timeout_then_succeeds(tmp_path: Path) -> 
 
 
 def test_live_transport_error_message_includes_base_url_and_hint(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path, base_url="https://apikey.soxio.me/openai"))
+    client = ReverseDetectiveAIClient(
+        _build_config(tmp_path, base_url="https://apikey.soxio.me/openai"),
+        cache_root=tmp_path / "cache",
+    )
 
     message = client._format_live_transport_error(httpx.ReadTimeout("The read operation timed out"))
 
@@ -327,7 +334,8 @@ def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:
             use_mock_when_unconfigured=False,
             fallback_to_mock_on_error=False,
             credentials_path=credentials_path,
-        )
+        ),
+        cache_root=tmp_path / "cache",
     )
 
     def fake_stream_live_scene(request, *, reasoning_effort: str, timeout_seconds: float):
@@ -343,3 +351,16 @@ def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:
     elapsed = time.monotonic() - start
 
     assert elapsed < 1.2
+
+
+def test_initial_scene_cache_roundtrip_loads_saved_scene(tmp_path: Path) -> None:
+    cache_root = tmp_path / "cache"
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=cache_root)
+    premise = build_default_premise()
+
+    scene = client.generate_initial_scene(premise)
+    cached_scene = client.load_cached_initial_scene(premise)
+
+    assert cached_scene is not None
+    assert cached_scene.scene.description == scene.scene.description
+    assert client.mode_label.startswith("Cached")

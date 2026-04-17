@@ -5,6 +5,7 @@ import pytest
 
 from reverse_detective.app import GameApp
 from reverse_detective.config import load_config
+from reverse_detective.scene_loader import load_scene_payload
 
 
 def test_game_app_starts_on_menu(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -33,6 +34,7 @@ def test_main_menu_can_enter_story_browser_and_start_game(monkeypatch: pytest.Mo
         submitted["called"] = True
 
     app._submit_initial_request = fake_submit_initial_request  # type: ignore[method-assign]
+    app._ai_client.load_cached_initial_scene = lambda premise: None  # type: ignore[method-assign]
     try:
         app._handle_keydown(pygame.K_RETURN)
 
@@ -44,6 +46,49 @@ def test_main_menu_can_enter_story_browser_and_start_game(monkeypatch: pytest.Mo
         assert app._session is not None
         assert app._premise is not None
         assert submitted["called"] is True
+    finally:
+        pygame.quit()
+
+
+def test_start_selected_story_uses_cached_initial_scene(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    submitted = {"called": False}
+    cached_scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "缓存初始场景",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "这是本地缓存的开场。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    def fake_submit_initial_request() -> None:
+        submitted["called"] = True
+
+    app._submit_initial_request = fake_submit_initial_request  # type: ignore[method-assign]
+    app._ai_client.load_cached_initial_scene = lambda premise: cached_scene  # type: ignore[method-assign]
+
+    try:
+        app._handle_keydown(pygame.K_RETURN)
+        app._handle_keydown(pygame.K_SPACE)
+
+        assert app._mode == "game"
+        assert app._premise is not None
+        assert app._session is not None
+        assert app._session.loading is False
+        assert app._session.current_scene.scene.description == "缓存初始场景"
+        assert submitted["called"] is False
+        assert app._session.selected_text_history is not None
+        assert "本地预生成" in app._session.selected_text_history.title
     finally:
         pygame.quit()
 
