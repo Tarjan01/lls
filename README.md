@@ -13,8 +13,9 @@
 ## 游戏流程
 1. **开局生成**：游戏启动时，AI 根据预设的基础设定（玩家身份、受害者身份、事件背景、动机）一次性生成初始场景配置，以 JSON 格式返回，客户端解析后加载场景。
 2. **场景探索**：玩家控制人物在 2.5D Pygame 场景中移动。NPC（含受害者）以静态站立为主，条件允许时可加入简单巡逻路径。
-3. **物品交互**：玩家靠近可互动物品时，弹出选项框。玩家做出选择后，客户端将【当前游戏状态 + 玩家选择】发送给 AI，AI 返回新的场景状态 JSON，客户端据此更新界面。
-4. **结局判定**：每次 AI 返回时，JSON 中包含 `game_status` 字段，可能值为 `ongoing` / `player_win` / `player_lose` / `special_ending`。结局文本由 AI 生成，支持多种结局分支。
+3. **物品交互**：玩家靠近可互动物品时，弹出选项框。大多数确定性的准备动作在本地按规则即时执行，不会立刻请求 AI。
+4. **关键决策推进**：只有当玩家选择被 AI 标记为关键决策的 `immediate_ai` 选项时，或者当前场景的确定性准备阶段已经耗尽、玩家手动请求推进时，客户端才会把【当前游戏状态 + 已发生动作】发送给 AI。
+5. **结局判定**：每次 AI 返回时，JSON 中包含 `game_status` 字段，可能值为 `ongoing` / `player_win` / `player_lose` / `special_ending`。结局文本由 AI 生成，支持多种结局分支。
 
 ## 胜负条件
 - **玩家胜利**：成功达成行凶目标且未被侦探识破，AI 判定案件悬而未决。
@@ -46,9 +47,32 @@ AI 每次返回的 JSON 需严格遵循以下结构：
             "name": "厨刀",
             "image": "item_knife.png",
             "position": [500, 350],
+            "state": {
+                "opened": false,
+                "locked": false,
+                "hidden": false,
+                "disabled": false
+            },
             "options": [
-            {"label": "拿起厨刀", "action_id": "pick_up_knife"},
-            {"label": "假装没看见", "action_id": "ignore_knife"}
+                {
+                    "label": "拿起厨刀",
+                    "action_id": "pick_up_knife",
+                    "resolution_mode": "local_rule",
+                    "local_logic": {
+                        "requires_state": {},
+                        "set_state": {
+                            "disabled": true
+                        },
+                        "success_text": "你已经拿起了厨刀。",
+                        "failure_text": "这里已经没有可再拿的厨刀了。"
+                    }
+                },
+                {
+                    "label": "直接行凶",
+                    "action_id": "commit_murder",
+                    "resolution_mode": "immediate_ai",
+                    "local_logic": null
+                }
             ]
         }
     ],
@@ -57,5 +81,12 @@ AI 每次返回的 JSON 需严格遵循以下结构：
     "ending_text": null
 }
 ```
+
+### 关键约束
+- `interactables[].state` 必须存在，且必须包含 `opened` / `locked` / `hidden` / `disabled` 四个布尔值。
+- `options[].resolution_mode` 只能是 `local_rule` 或 `immediate_ai`。
+- `options[].local_logic` 如果是对象，必须完整包含 `requires_state` / `set_state` / `success_text` / `failure_text` 四个字段，不能只返回部分字段。
+- `local_rule` 用于本地可确定处理的准备动作；`immediate_ai` 用于会显著改变风险、时间、地点、证据或剧情走向的关键决策点。
+- AI 应按完整剧情脉络生成场景推进，允许在关键决策后切换时间、地点和场景布局。
 ## 关键内容
 游戏制作方只提供基础的人物设定和故事背景。场景图片、可互动物品、选项内容、故事逻辑与结局**全部由大模型实时生成**。

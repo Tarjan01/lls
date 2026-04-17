@@ -334,6 +334,53 @@ def test_live_error_normalizes_concurrency_limit_message(tmp_path: Path) -> None
     assert "同时只能处理一个实时请求" in str(error)
 
 
+def test_scene_payload_repair_fills_missing_local_logic_keys(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    scene = client._load_scene_payload_with_repair(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "repair",
+            },
+            "npcs": [],
+            "interactables": [
+                {
+                    "id": "door",
+                    "name": "门",
+                    "image": "door.png",
+                    "position": [320, 240],
+                    "state": {
+                        "opened": False,
+                        "locked": True,
+                        "hidden": False,
+                        "disabled": False,
+                    },
+                    "options": [
+                        {
+                            "label": "开锁",
+                            "action_id": "unlock",
+                            "resolution_mode": "local_rule",
+                            "local_logic": {
+                                "requires_state": {"locked": True},
+                                "success_text": "锁开了。",
+                            },
+                        }
+                    ],
+                }
+            ],
+            "narrative": "测试修复缺失的 local_logic 键。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    assert scene.interactables[0].options[0].local_logic is not None
+    assert scene.interactables[0].options[0].local_logic.set_state == {}
+    assert scene.interactables[0].options[0].local_logic.failure_text is None
+
+
 def test_live_timeout_expands_stream_read_deadline_for_normal_requests(tmp_path: Path) -> None:
     client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 

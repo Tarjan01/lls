@@ -72,7 +72,6 @@ LIVE_WORLD_HEIGHT = 520
 LIVE_WORLD_X_RANGE = (96, LIVE_WORLD_WIDTH - 96)
 LIVE_WORLD_Y_RANGE = (140, LIVE_WORLD_HEIGHT - 68)
 LIVE_NORMALIZED_COORDINATE_MAX = 120
-ACTION_POINTS_PER_SETTLEMENT = 5
 LIVE_RETRYABLE_REASONS = ("xhigh", "high", "medium", "low")
 INITIAL_SCENE_CACHE_VERSION = 1
 DEFAULT_INITIAL_SCENE_CACHE_ROOT = Path("~/.reverse_detective/cache/initial_scenes").expanduser()
@@ -305,7 +304,7 @@ class ReverseDetectiveAIClient:
 
         raw_content = self._extract_response_content(response, streamed_text)
         try:
-            return self._normalize_scene_layout(load_scene_payload(raw_content))
+            return self._load_scene_payload_with_repair(raw_content)
         except Exception as exc:
             raise AIClientError(f"Live AI returned invalid scene JSON: {exc}") from exc
 
@@ -452,8 +451,9 @@ class ReverseDetectiveAIClient:
             "You generate scene JSON for a reverse-detective game. "
             "Return exactly one JSON object and nothing else. "
             "Do not return markdown, explanations, or code fences. "
-            "The client performs predictable local interactions first and only asks you to settle the round after several actions, "
-            "or immediately after a rare high-risk choice marked as immediate_ai. "
+            "The client performs predictable local interactions locally and only asks you for the initial scene, "
+            "or when the player chooses an option marked immediate_ai, "
+            "or when the player manually requests story progression because the current deterministic setup phase is exhausted. "
             "You must return the next settled scene after adjudicating the whole pending action batch. "
             "The JSON must match this schema exactly with no missing or extra root fields:\n"
             f"{schema_text}\n"
@@ -462,38 +462,42 @@ class ReverseDetectiveAIClient:
             "2. ending_text must be null when game_status is ongoing, otherwise it must contain a concrete ending text.\n"
             "3. Every interactable must include state with opened, locked, hidden, disabled booleans.\n"
             "4. Every option must include resolution_mode and local_logic. resolution_mode must be local_rule or immediate_ai.\n"
-            "5. Prefer local_rule by default. Only mark an option as immediate_ai when it can sharply change risk, social reaction, exposure, evidence, or branch outcome.\n"
-            "6. Keep immediate_ai options rare: most ongoing scenes should have zero to two immediate_ai options total, and the majority of options should remain local_rule.\n"
-            "7. Good local_rule examples: unlocking, opening, searching, observing, picking up known tools, simple setup, repeatable checks.\n"
-            "8. Good immediate_ai examples: executing the crime, bluffing an NPC, moving a body, destroying evidence under pressure, triggering alarms, forcing confrontation, or any action whose outcome depends on dynamic reactions.\n"
+            "5. Prefer local_rule by default. Only mark an option as immediate_ai when it is a true key decision that can sharply change risk, social reaction, exposure, evidence, time jump, location jump, or branch outcome.\n"
+            "6. Keep immediate_ai options rare and meaningful: most ongoing scenes should have zero to two immediate_ai options total, and the majority of options should remain local_rule.\n"
+            "7. Good local_rule examples: unlocking, opening, searching, observing, picking up known tools, simple setup, repeatable checks, deterministic positioning and disguise work.\n"
+            "8. Good immediate_ai examples: committing the crime, bluffing an NPC, moving a body, destroying evidence under pressure, triggering alarms, forcing confrontation, choosing whether to flee, or any action whose outcome depends on dynamic reactions.\n"
             "9. local_logic can only describe same-object logic through requires_state and set_state, using only opened, locked, hidden, disabled.\n"
-            "10. For local_rule options, provide local_logic whenever the result is deterministic on the current object. Use null only when the action is a simple no-op or observation.\n"
-            "11. immediate_ai options may still use local_logic for deterministic prerequisites or same-object setup before adjudication.\n"
-            f"12. The client normally spends {ACTION_POINTS_PER_SETTLEMENT} action points before calling you. "
-            "For ongoing scenes, keep enough meaningful local_rule interactables and options so the player can usually take several local actions before the next settlement.\n"
-            f"13. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
-            f"14. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
-            "15. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
-            "16. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "17. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
-            "18. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
-            "19. narrative must describe the current situation, risk, and the consequences of this round's actions.\n"
-            "20. All visible text content must be Simplified Chinese.\n"
+            "10. IMPORTANT: if local_logic is an object, it must contain exactly four keys: requires_state, set_state, success_text, failure_text. Never return a partial local_logic object. If any key is unused, still include it with {} or null.\n"
+            "11. For local_rule options, provide a full local_logic object whenever the result is deterministic on the current object. Use null only when the action is a pure observation or descriptive no-op.\n"
+            "12. immediate_ai options may still use local_logic for deterministic prerequisites or same-object setup before adjudication.\n"
+            "13. Plan a complete 3-6 beat story arc internally. Let scenes shift across time and locations when key decisions resolve, while preserving continuity from prior actions.\n"
+            "14. Each ongoing scene should usually contain one clear next key decision and several deterministic preparation options that let the player set up that decision without another model call.\n"
+            f"15. The playable area is {LIVE_WORLD_WIDTH}x{LIVE_WORLD_HEIGHT} pixels. Every position must use this pixel coordinate space.\n"
+            f"16. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
+            "17. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
+            "18. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
+            "19. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_hall.png or security_guard.png.\n"
+            "20. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
+            "21. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decision.\n"
+            "22. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
         payload = {
             "request_type": request.request_type,
-            "action_point_rule": {
-                "actions_per_settlement": ACTION_POINTS_PER_SETTLEMENT,
+            "decision_flow": {
                 "client_behavior": (
-                    "The client applies predictable local_rule logic immediately on the current scene, "
-                    "then calls the model after several actions, when no actions remain, "
-                    "or immediately after the player selects an option marked immediate_ai."
+                    "The client applies predictable local_rule logic immediately on the current scene and stores those actions locally. "
+                    "It calls the model only on initial scene generation, when the player selects an immediate_ai option, "
+                    "or when the player manually requests progression because the deterministic setup phase has run out of meaningful actions."
                 ),
                 "balancing_goal": (
                     "Keep immediate_ai options rare but meaningful. "
-                    "Most options should remain local_rule so the player can act smoothly without waiting on the network."
+                    "Most options should remain deterministic local_rule setup so the player can act smoothly without waiting on the network."
+                ),
+                "story_goal": (
+                    "Design a coherent multi-scene crime plan with time progression, location changes, and escalating pressure. "
+                    "Each returned scene should feel like one beat inside a larger plotted case."
                 ),
             },
             "scene_layout": {
@@ -592,9 +596,69 @@ class ReverseDetectiveAIClient:
             return None
 
         try:
-            return load_scene_payload(candidate)
+            return self._load_scene_payload_with_repair(candidate)
         except Exception:
             return None
+
+    def _load_scene_payload_with_repair(self, payload: str | dict[str, Any]) -> SceneState:
+        try:
+            return self._normalize_scene_layout(load_scene_payload(payload))
+        except Exception:
+            repaired_payload = self._repair_scene_payload_schema(payload)
+            return self._normalize_scene_layout(load_scene_payload(repaired_payload))
+
+    def _repair_scene_payload_schema(self, payload: str | dict[str, Any]) -> dict[str, Any]:
+        if isinstance(payload, str):
+            raw_payload = json.loads(payload)
+        else:
+            raw_payload = dict(payload)
+
+        if not isinstance(raw_payload, dict):
+            return raw_payload
+
+        interactables = raw_payload.get("interactables")
+        if isinstance(interactables, list):
+            repaired_interactables: list[Any] = []
+            for interactable in interactables:
+                if not isinstance(interactable, dict):
+                    repaired_interactables.append(interactable)
+                    continue
+
+                repaired_interactable = dict(interactable)
+                state = repaired_interactable.get("state")
+                if isinstance(state, dict):
+                    repaired_interactable["state"] = {
+                        "opened": bool(state.get("opened", False)),
+                        "locked": bool(state.get("locked", False)),
+                        "hidden": bool(state.get("hidden", False)),
+                        "disabled": bool(state.get("disabled", False)),
+                    }
+
+                options = repaired_interactable.get("options")
+                if isinstance(options, list):
+                    repaired_options: list[Any] = []
+                    for option in options:
+                        if not isinstance(option, dict):
+                            repaired_options.append(option)
+                            continue
+                        repaired_option = dict(option)
+                        repaired_option.setdefault("resolution_mode", "local_rule")
+                        if "local_logic" in repaired_option and isinstance(repaired_option["local_logic"], dict):
+                            logic = dict(repaired_option["local_logic"])
+                            repaired_option["local_logic"] = {
+                                "requires_state": dict(logic.get("requires_state", {})),
+                                "set_state": dict(logic.get("set_state", {})),
+                                "success_text": logic.get("success_text"),
+                                "failure_text": logic.get("failure_text"),
+                            }
+                        repaired_options.append(repaired_option)
+                    repaired_interactable["options"] = repaired_options
+
+                repaired_interactables.append(repaired_interactable)
+
+            raw_payload["interactables"] = repaired_interactables
+
+        return raw_payload
 
     def _normalize_scene_layout(self, scene: SceneState) -> SceneState:
         points = self._scene_points(scene)
@@ -919,7 +983,7 @@ class _MockStoryEngine:
                     ],
                 ),
             ],
-            "narrative": "暴雨压着整座宅邸，你必须先在本地行动点里做好准备，再等待系统结算这轮选择。",
+            "narrative": "暴雨压着整座宅邸，你必须先完成确定性的准备动作，再在关键决策点推动剧情进入下一阶段。",
             "game_status": "ongoing",
             "ending_text": None,
         }

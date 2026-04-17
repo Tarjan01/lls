@@ -74,8 +74,6 @@ class GameSessionState:
     loading: bool = True
     error_message: str | None = None
     local_message: str | None = None
-    action_points_per_round: int = 5
-    remaining_action_points: int = 5
 
     @classmethod
     def create(cls, premise: StoryPremise) -> "GameSessionState":
@@ -91,17 +89,36 @@ class GameSessionState:
 
     @property
     def needs_settlement(self) -> bool:
-        return bool(self.round_actions) and (
-            self.remaining_action_points <= 0 or not self.has_available_actions
-        )
+        return False
 
     @property
     def has_available_actions(self) -> bool:
         return scene_has_available_actions(self.current_scene)
 
     @property
+    def has_available_local_actions(self) -> bool:
+        for interactable in self.current_scene.interactables:
+            for option in self.available_options_for(interactable):
+                if option.resolution_mode == "local_rule":
+                    return True
+        return False
+
+    @property
+    def has_available_immediate_actions(self) -> bool:
+        for interactable in self.current_scene.interactables:
+            for option in self.available_options_for(interactable):
+                if option.resolution_mode == "immediate_ai":
+                    return True
+        return False
+
+    @property
     def can_force_settle(self) -> bool:
-        return bool(self.round_actions) and not self.loading
+        return (
+            bool(self.round_actions)
+            and not self.loading
+            and not self.has_available_local_actions
+            and not self.has_available_immediate_actions
+        )
 
     @property
     def selected_text_history(self) -> TextHistoryEntry | None:
@@ -122,7 +139,6 @@ class GameSessionState:
         self.loading = True
         self.error_message = None
         self.local_message = None
-        self.remaining_action_points = self.action_points_per_round
 
     def set_player_position(self, x: float, y: float) -> None:
         self.player_position = (x, y)
@@ -217,7 +233,6 @@ class GameSessionState:
         if interactable is None:
             record = choice.to_record()
             self.round_actions.append(record)
-            self.remaining_action_points = max(0, self.remaining_action_points - 1)
             self.local_message = f"未能找到交互目标：{choice.interactable_name}"
             self._append_text_history(
                 f"行动 {record.turn_index} · {record.label}",
@@ -230,7 +245,7 @@ class GameSessionState:
             return ChoiceResolution(
                 record=record,
                 message=self.local_message,
-                should_settle=self.needs_settlement,
+                should_settle=False,
             )
 
         option = next(
@@ -244,7 +259,6 @@ class GameSessionState:
         if option is None:
             record = choice.to_record()
             self.round_actions.append(record)
-            self.remaining_action_points = max(0, self.remaining_action_points - 1)
             self.local_message = f"当前无法执行“{choice.label}”。"
             self._append_text_history(
                 f"行动 {record.turn_index} · {record.label}",
@@ -257,14 +271,13 @@ class GameSessionState:
             return ChoiceResolution(
                 record=record,
                 message=self.local_message,
-                should_settle=self.needs_settlement,
+                should_settle=False,
             )
 
         outcome = apply_local_action(self.current_scene, interactable.id, option)
         self.current_scene = outcome.scene
         record = choice.to_record()
         self.round_actions.append(record)
-        self.remaining_action_points = max(0, self.remaining_action_points - 1)
         self.local_message = outcome.message
         self.error_message = None
         if outcome.message:
@@ -280,7 +293,7 @@ class GameSessionState:
         return ChoiceResolution(
             record=record,
             message=outcome.message,
-            should_settle=requires_immediate_ai or self.needs_settlement,
+            should_settle=requires_immediate_ai,
             requires_immediate_ai=requires_immediate_ai,
         )
 
@@ -299,7 +312,6 @@ class GameSessionState:
         self.selected_option_index = 0
         self.settled_action_history.clear()
         self.round_actions.clear()
-        self.remaining_action_points = self.action_points_per_round
 
     def finish_settlement(self, scene: SceneState) -> None:
         round_snapshot = list(self.round_actions)
@@ -317,7 +329,6 @@ class GameSessionState:
             self._append_scene_history(title=title, scene=scene, turn_index=round_snapshot[-1].turn_index)
         self.active_interactable_id = None
         self.selected_option_index = 0
-        self.remaining_action_points = self.action_points_per_round
 
     def fail_action(self, message: str) -> None:
         self.loading = False

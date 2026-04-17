@@ -11,7 +11,7 @@ def _build_local_logic_scene():
             "scene": {
                 "background_image": "mansion_study_room.png",
                 "bgm": "tense_loop.mp3",
-                "description": "行动点测试场景",
+                "description": "关键决策测试场景",
             },
             "npcs": [],
             "interactables": [
@@ -89,7 +89,7 @@ def _build_local_logic_scene():
                     ],
                 },
             ],
-            "narrative": "测试本地交互与行动点。",
+            "narrative": "测试本地交互与关键决策推进。",
             "game_status": "ongoing",
             "ending_text": None,
         }
@@ -112,8 +112,8 @@ def test_game_state_applies_local_logic_and_hides_invalid_options() -> None:
 
     assert resolution.message == "门锁被你悄悄解开。"
     assert resolution.should_settle is False
-    assert session.remaining_action_points == 4
     assert session.current_scene.interactables[0].state.locked is False
+    assert len(session.round_actions) == 1
     assert session.selected_text_history is not None
     assert session.selected_text_history.body == "门锁被你悄悄解开。"
 
@@ -122,20 +122,20 @@ def test_game_state_applies_local_logic_and_hides_invalid_options() -> None:
     assert [option.action_id for option in options] == ["open_door"]
 
 
-def test_game_state_marks_round_for_settlement_after_five_actions() -> None:
+def test_game_state_keeps_local_actions_pending_until_key_decision() -> None:
     session = GameSessionState.create(build_default_premise())
     session.finish_initial_scene(_build_local_logic_scene())
 
-    for expected_points in [4, 3, 2, 1, 0]:
+    for _ in range(5):
         session.set_active_interactable("clock")
         choice = session.choose_option_by_index(0)
         assert choice is not None
         resolution = session.apply_choice(choice)
-        assert session.remaining_action_points == expected_points
 
-    assert resolution.should_settle is True
-    assert session.needs_settlement is True
+    assert resolution.should_settle is False
+    assert session.needs_settlement is False
     assert len(session.round_actions) == 5
+    assert session.can_force_settle is False
 
 
 def test_finish_settlement_moves_round_actions_into_history() -> None:
@@ -152,10 +152,9 @@ def test_finish_settlement_moves_round_actions_into_history() -> None:
 
     assert len(session.round_actions) == 0
     assert len(session.settled_action_history) == 1
-    assert session.remaining_action_points == session.action_points_per_round
     assert session.selected_text_history is not None
     assert session.selected_text_history.title.startswith("回合结算")
-    assert "测试本地交互与行动点。" in session.selected_text_history.body
+    assert "测试本地交互与关键决策推进。" in session.selected_text_history.body
 
 
 def test_game_state_immediate_ai_option_forces_early_settlement() -> None:
@@ -171,7 +170,6 @@ def test_game_state_immediate_ai_option_forces_early_settlement() -> None:
 
     assert resolution.requires_immediate_ai is True
     assert resolution.should_settle is True
-    assert session.remaining_action_points == 4
     assert session.round_actions[-1].resolution_mode == "immediate_ai"
 
 

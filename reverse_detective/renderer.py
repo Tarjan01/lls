@@ -524,94 +524,105 @@ class Renderer(TooltipMixin):
 
         self._blit_clamped_line(
             self._title_font,
-            f"场景: {scene.scene.description}",
+            f"{story_title} · {scene.scene.description}",
             (36, self._hud_top + 24),
             (242, 238, 229),
-            780,
-        )
-        self._blit_preview_block(
-            self._body_font,
-            scene.narrative,
-            (36, self._hud_top + 72),
-            (219, 221, 229),
             760,
-            3,
-            line_gap=6,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            f"模式 {mode_label} | 状态 {scene.game_status} | 点击右侧侧栏查看剧情、反馈、档案与待处理动作",
+            (36, self._hud_top + 60),
+            (211, 216, 225),
+            760,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            "移动: WASD | 交互: 上下切选项 / Enter / Space | 关键决策: 选择标记为 [即时AI] 的选项",
+            (36, self._hud_top + 84),
+            (231, 208, 166),
+            760,
         )
 
-        if session.local_message:
+        self._draw_hud_sidebar_tabs(scene, session, mode_label, story_title)
+
+        if session.can_force_settle and not session.loading and not scene.is_terminal:
             self._blit_clamped_line(
                 self._small_font,
-                "本地反馈：",
-                (36, self._hud_top + 150),
-                (237, 221, 189),
-                760,
-            )
-            self._blit_preview_block(
-                self._small_font,
-                session.local_message,
-                (36, self._hud_top + 172),
-                (237, 221, 189),
-                760,
-                2,
-                line_gap=5,
-            )
-
-        summary_lines = [
-            f"案件: {story_title}",
-            f"模式: {mode_label}",
-            f"状态: {scene.game_status}",
-            f"行动点: {session.remaining_action_points}/{session.action_points_per_round}",
-            f"本轮待结算: {len(session.round_actions)}",
-            "标记: [规则] 本地执行 | [即时AI] 立即结算",
-            "控制: WASD 移动",
-            "交互: 上下切选项，Enter/Space 确认",
-            "快捷: 数字键 1-9 直接选项，T 提前结算/重试，R 重开，M 返回菜单，Esc 退出",
-        ]
-        self._blit_clamped_lines(
-            summary_lines,
-            self._small_font,
-            (870, self._hud_top + 30),
-            (197, 205, 219),
-            360,
-        )
-
-        round_lines = ["本轮行动:"]
-        if session.round_actions:
-            for record in session.round_actions[-5:]:
-                round_lines.append(f"{record.turn_index}. {record.label}")
-        else:
-            round_lines.append("尚未消耗行动点")
-        self._blit_clamped_lines(
-            round_lines,
-            self._small_font,
-            (870, self._hud_top + 190),
-            (237, 221, 189),
-            170,
-        )
-
-        settled_lines = ["已结算记录:"]
-        if session.settled_action_history:
-            for record in session.settled_action_history[-4:]:
-                settled_lines.append(f"{record.turn_index}. {record.label}")
-        else:
-            settled_lines.append("暂无")
-        self._blit_clamped_lines(
-            settled_lines,
-            self._small_font,
-            (1060, self._hud_top + 190),
-            (215, 219, 228),
-            170,
-        )
-
-        if session.needs_settlement and not session.loading and not scene.is_terminal:
-            self._blit_clamped_line(
-                self._small_font,
-                "本轮行动点已耗尽，按 T 立即结算。",
+                "当前场景的确定性准备已耗尽，按 T 请求推进到下一剧情节点。",
                 (36, self._height - 36),
                 (238, 199, 132),
                 self._width - 72,
             )
+
+    def _draw_hud_sidebar_tabs(
+        self,
+        scene: SceneState,
+        session: GameSessionState,
+        mode_label: str,
+        story_title: str,
+    ) -> None:
+        rail_rect = pygame.Rect(self._width - 266, self._hud_top + 18, 232, self._height - self._hud_top - 36)
+        pygame.draw.rect(self._surface, (17, 21, 29), rail_rect, border_radius=22)
+        pygame.draw.rect(self._surface, (94, 109, 128), rail_rect, width=2, border_radius=22)
+
+        archive_lines = [
+            f"{entry.title}\n{entry.body}"
+            for entry in session.text_history[-6:]
+        ]
+        archive_body = "\n\n".join(archive_lines) if archive_lines else "当前还没有文本档案。"
+        pending_body = (
+            "\n".join(f"{record.turn_index}. {record.label}" for record in session.round_actions)
+            if session.round_actions
+            else "当前还没有待 AI 裁决的关键动作。"
+        )
+        settled_body = (
+            "\n".join(f"{record.turn_index}. {record.label}" for record in session.settled_action_history[-8:])
+            if session.settled_action_history
+            else "当前还没有已推进的剧情节点。"
+        )
+        status_body = "\n".join(
+            [
+                f"案件：{story_title}",
+                f"场景：{scene.scene.description}",
+                f"模式：{mode_label}",
+                f"状态：{scene.game_status}",
+                f"可记录的本地动作：{len(session.round_actions)}",
+                f"已推进剧情节点：{len(session.settled_action_history)}",
+                "说明：[规则] 为本地即时处理，[即时AI] 为关键决策节点。",
+                "快捷：R 重开 | M 返回菜单 | Esc 退出选中文本",
+            ]
+        )
+        feedback_body = session.local_message or "当前还没有新的本地反馈。"
+
+        sections = [
+            ("剧情", f"剧情叙述\n\n{scene.narrative}", (228, 193, 127)),
+            ("反馈", f"本地反馈\n\n{feedback_body}", (219, 176, 136)),
+            ("状态", f"状态摘要\n\n{status_body}", (136, 191, 216)),
+            ("待裁决", f"待裁决动作\n\n{pending_body}", (205, 186, 118)),
+            ("已推进", f"已推进节点\n\n{settled_body}", (142, 206, 178)),
+            ("档案", f"文本档案\n\n{archive_body}", (187, 167, 214)),
+        ]
+
+        row_y = rail_rect.y + 18
+        for label, body, accent in sections:
+            row_rect = pygame.Rect(rail_rect.x + 16, row_y, rail_rect.width - 32, 34)
+            tab_key = self._tooltip_key(row_rect, body)
+            is_selected = self._selected_text_key == tab_key
+            fill = accent if is_selected else (38, 45, 58)
+            border = (245, 230, 201) if is_selected else (101, 113, 128)
+            text_color = (29, 23, 16) if is_selected else (237, 241, 246)
+            pygame.draw.rect(self._surface, fill, row_rect, border_radius=12)
+            pygame.draw.rect(self._surface, border, row_rect, width=2, border_radius=12)
+            self._blit_clamped_line(
+                self._small_font,
+                label,
+                (row_rect.x + 12, row_rect.y + 8),
+                text_color,
+                row_rect.width - 24,
+            )
+            self._register_tooltip(row_rect, body, selected=is_selected, preferred_width=520)
+            row_y += 42
 
     def _draw_option_popup(
         self,
@@ -679,7 +690,7 @@ class Renderer(TooltipMixin):
             else "AI 正在结算本轮行动…"
         )
         subtitle_text = (
-            "将根据本轮行动点刷新场景与裁决结果。"
+            "将根据你刚刚触发的关键决策刷新场景与后续剧情节点。"
             if session.round_actions
             else "正在加载本局的初始空间布局与角色状态。"
         )
@@ -714,7 +725,7 @@ class Renderer(TooltipMixin):
                 for record in session.round_actions[-4:]
             )
             if session.round_actions
-            else "本次为初始生成，没有待结算动作。"
+            else "本次为初始生成，没有待处理动作。"
         )
         self._blit_clamped_line(
             self._small_font,
