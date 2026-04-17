@@ -55,6 +55,21 @@ def test_mock_story_exposes_multiple_key_decision_vectors(tmp_path: Path) -> Non
     assert len({interactable_id for interactable_id, _ in key_choices}) >= 2
 
 
+def test_mock_story_assigns_local_audio_cues(tmp_path: Path) -> None:
+    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
+
+    scene = client.generate_initial_scene(build_default_premise())
+    option_sfx = {
+        option.sfx
+        for interactable in scene.interactables
+        for option in interactable.options
+        if option.sfx is not None
+    }
+
+    assert scene.scene.bgm in {"tense_loop", "investigation_calm", "ending_resolve"}
+    assert {"ui_confirm", "lock_open"} <= option_sfx
+
+
 def test_mock_story_can_reach_player_win(tmp_path: Path) -> None:
     client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
     premise = build_default_premise()
@@ -127,6 +142,7 @@ def test_build_response_input_uses_message_list_for_live_api(tmp_path: Path) -> 
     assert isinstance(response_input[0]["content"], str)
     assert isinstance(response_input[1]["content"], str)
     assert '"scene_layout"' in response_input[1]["content"]
+    assert '"audio_guidance"' in response_input[1]["content"]
     assert '"coordinate_system":"pixel"' in response_input[1]["content"]
     assert '"balancing_goal"' in response_input[1]["content"]
     assert '"recent_actions"' in response_input[1]["content"]
@@ -141,6 +157,8 @@ def test_system_prompt_requires_branching_key_choices_and_feedback(tmp_path: Pat
     assert "Every local_rule option MUST include a non-null local_logic object" in prompt
     assert "Never include filler actions that only say the action happened" in prompt
     assert "Avoid single-path scenes" in prompt
+    assert "scene.bgm must be a local music cue id" in prompt
+    assert "options[].sfx should be null or a local sound cue id" in prompt
 
 
 def test_live_scene_uses_streaming_responses_api(

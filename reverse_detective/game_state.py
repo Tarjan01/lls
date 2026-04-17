@@ -29,6 +29,7 @@ class PendingChoice:
     label: str
     action_id: str
     resolution_mode: ActionResolutionMode = "local_rule"
+    sfx: str | None = None
 
     def to_record(self) -> ActionRecord:
         return ActionRecord(
@@ -191,6 +192,7 @@ class GameSessionState:
             label=option.label,
             action_id=option.action_id,
             resolution_mode=option.resolution_mode,
+            sfx=option.sfx,
         )
 
     def available_options_for(self, interactable: Interactable) -> tuple[ActionOption, ...]:

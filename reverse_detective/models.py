@@ -60,6 +60,7 @@ class ActionOption:
     action_id: str
     resolution_mode: ActionResolutionMode = "local_rule"
     local_logic: ActionLocalLogic | None = None
+    sfx: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

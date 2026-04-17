@@ -24,7 +24,7 @@ class SceneValidationError(ValueError):
 
 
 _INTERACTABLE_STATE_KEYS = {"opened", "locked", "hidden", "disabled"}
-_OPTION_KEYS = {"label", "action_id", "resolution_mode", "local_logic"}
+_OPTION_KEYS = {"label", "action_id", "resolution_mode", "local_logic", "sfx"}
 _LOCAL_LOGIC_KEYS = {"requires_state", "set_state", "success_text", "failure_text"}
 _RESOLUTION_MODES: set[ActionResolutionMode] = {"local_rule", "immediate_ai"}
 
@@ -107,6 +107,7 @@ def scene_to_dict(scene: SceneState) -> dict[str, Any]:
                         "label": option.label,
                         "action_id": option.action_id,
                         "resolution_mode": option.resolution_mode,
+                        "sfx": option.sfx,
                         "local_logic": None
                         if option.local_logic is None
                         else {
@@ -221,6 +222,7 @@ def _parse_option(value: Any, option_index: int, parent_path: str) -> ActionOpti
         action_id=_require_non_empty_string(option_data["action_id"], f"{path}.action_id"),
         resolution_mode=resolution_mode,
         local_logic=local_logic,
+        sfx=_require_optional_string(option_data.get("sfx"), f"{path}.sfx"),
     )
 
 

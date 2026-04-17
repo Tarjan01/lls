@@ -1,0 +1,36 @@
+{
+  "entries": [
+    {
+      "id": "menu_mystery",
+      "path": "bgm/menu_mystery.ogg",
+      "aliases": ["menu_mystery", "menu_theme", "main_menu", "settings", "story_browser", "菜单", "主页"],
+      "tags": ["menu", "mystery", "calm", "briefing", "selection", "菜单", "神秘", "平静"],
+      "source": "https://opengameart.org/content/short-loops-background-music-pack",
+      "license": "CC0"
+    },
+    {
+      "id": "tense_loop",
+      "path": "bgm/tense_loop.ogg",
+      "aliases": ["tense_loop", "tense_loop.mp3", "bgm.mp3", "tense", "pressure", "紧张", "危险"],
+      "tags": ["tense", "danger", "risk", "stealth", "action", "infiltration", "紧张", "潜行", "风险"],
+      "source": "https://opengameart.org/content/short-loops-background-music-pack",
+      "license": "CC0"
+    },
+    {
+      "id": "investigation_calm",
+      "path": "bgm/investigation_calm.ogg",
+      "aliases": ["investigation_calm", "calm_loop", "quiet_investigation", "briefing", "调查", "布置"],
+      "tags": ["calm", "investigation", "setup", "analysis", "quiet", "调查", "筹备", "安静"],
+      "source": "https://opengameart.org/content/short-loops-background-music-pack",
+      "license": "CC0"
+    },
+    {
+      "id": "ending_resolve",
+      "path": "bgm/ending_resolve.ogg",
+      "aliases": ["ending_resolve", "ending_resolve.mp3", "ending_theme", "ending", "结局", "终局"],
+      "tags": ["ending", "resolve", "result", "credits", "finale", "结局", "终局", "收束"],
+      "source": "https://opengameart.org/content/short-loops-background-music-pack",
+      "license": "CC0"
+    }
+  ]
+}

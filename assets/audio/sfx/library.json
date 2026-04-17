@@ -1,0 +1,60 @@
+{
+  "entries": [
+    {
+      "id": "ui_confirm",
+      "path": "sfx/ui_confirm.mp3",
+      "aliases": ["ui_confirm", "button", "select", "menu_confirm", "inspect", "确认", "选择", "查看"],
+      "tags": ["ui", "confirm", "button", "select", "menu", "确认", "选择", "查看"],
+      "source": "https://opengameart.org/content/basic-sound-effects",
+      "license": "CC0"
+    },
+    {
+      "id": "ui_success",
+      "path": "sfx/ui_success.mp3",
+      "aliases": ["ui_success", "success", "scene_transition", "settle", "complete", "完成", "结算"],
+      "tags": ["ui", "success", "resolve", "complete", "advance", "完成", "结算", "推进"],
+      "source": "https://opengameart.org/content/basic-sound-effects",
+      "license": "CC0"
+    },
+    {
+      "id": "lock_open",
+      "path": "sfx/lock_open.ogg",
+      "aliases": ["lock_open", "unlock", "unlock_door", "door_unlock", "lockpick", "开锁", "撬锁"],
+      "tags": ["lock", "open", "unlock", "door", "metal", "keys", "开锁", "门锁", "金属"],
+      "source": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "license": "CC0"
+    },
+    {
+      "id": "door_open",
+      "path": "sfx/door_open.ogg",
+      "aliases": ["door_open", "open_door", "open", "push_door", "enter_room", "开门", "推门"],
+      "tags": ["door", "open", "wood", "entry", "room", "开门", "入场", "房门"],
+      "source": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "license": "CC0"
+    },
+    {
+      "id": "keys_rattle",
+      "path": "sfx/keys_rattle.ogg",
+      "aliases": ["keys_rattle", "keys", "keycard", "evidence_pickup", "pick_up", "拿取", "道具"],
+      "tags": ["keys", "pickup", "item", "evidence", "inventory", "拿取", "道具", "搜证"],
+      "source": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "license": "CC0"
+    },
+    {
+      "id": "metal_hit",
+      "path": "sfx/metal_hit.ogg",
+      "aliases": ["metal_hit", "alarm", "danger", "risk", "weapon", "警报", "危险", "冲突"],
+      "tags": ["metal", "hit", "danger", "alarm", "risk", "impact", "警报", "危险", "对抗"],
+      "source": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "license": "CC0"
+    },
+    {
+      "id": "wood_slam",
+      "path": "sfx/wood_slam.ogg",
+      "aliases": ["wood_slam", "slam", "close_door", "escape", "confront", "重击", "撤离", "收束"],
+      "tags": ["wood", "slam", "close", "escape", "door", "confrontation", "撤离", "终结", "重击"],
+      "source": "https://opengameart.org/content/100-cc0-metal-and-wood-sfx",
+      "license": "CC0"
+    }
+  ]
+}

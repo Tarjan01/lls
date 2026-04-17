@@ -10,6 +10,7 @@ from typing import Literal
 import pygame
 
 from reverse_detective.ai_client import AIClientError, ReverseDetectiveAIClient
+from reverse_detective.audio import AudioController
 from reverse_detective.config import (
     AIConfig,
     AppConfig,
@@ -187,6 +188,7 @@ class GameApp:
             config.display.width,
             config.display.height,
         )
+        self._audio = AudioController()
         self._ai_client = self._build_ai_client(config.ai)
         self._schedule_initial_scene_prefetch()
 
@@ -202,6 +204,7 @@ class GameApp:
                 self._update_active_interactable()
                 self._draw()
         finally:
+            self._audio.close()
             self._ai_client.close()
             pygame.quit()
 
@@ -304,6 +307,7 @@ class GameApp:
         if key not in (pygame.K_RETURN, pygame.K_SPACE):
             return
 
+        self._audio.play_confirm(MAIN_MENU_OPTIONS[self._main_menu_index])
         if self._main_menu_index == 0:
             self._enter_story_browser()
         elif self._main_menu_index == 1:
@@ -337,10 +341,12 @@ class GameApp:
             return
 
         if key == pygame.K_RETURN:
+            self._audio.play_confirm("story_detail")
             self._open_detail_modal()
             return
 
         if key == pygame.K_SPACE:
+            self._audio.play_confirm("start_story", self.current_story.title)
             self._start_selected_story()
 
     def _handle_settings_keydown(self, key: int) -> None:
@@ -361,18 +367,22 @@ class GameApp:
         if key in (pygame.K_LEFT, pygame.K_RIGHT):
             if field_kind == "bool":
                 self._toggle_setting(field_name)
+                self._audio.play_confirm(field_name)
                 return
             if field_kind == "choice":
                 direction = -1 if key == pygame.K_LEFT else 1
                 self._cycle_choice_setting(field_name, direction)
+                self._audio.play_confirm(field_name, str(getattr(self._settings_draft, field_name)))
                 return
             return
 
         if key == pygame.K_RETURN:
             if field_kind == "bool":
                 self._toggle_setting(field_name)
+                self._audio.play_confirm(field_name)
             elif field_kind == "choice":
                 self._cycle_choice_setting(field_name, 1)
+                self._audio.play_confirm(field_name, str(getattr(self._settings_draft, field_name)))
             else:
                 self._begin_input_edit(
                     field_name=field_name,
@@ -570,6 +580,7 @@ class GameApp:
         if key in (pygame.K_RETURN, pygame.K_SPACE, pygame.K_e):
             choice = self._session.choose_option_by_index(self._session.selected_option_index)
             if choice is not None:
+                self._audio.play_effect(choice.sfx, choice.label, choice.action_id)
                 resolution = self._session.apply_choice(choice)
                 if resolution.requires_immediate_ai:
                     self._submit_settlement_request(request_type="forced_immediate_choice")
@@ -581,6 +592,7 @@ class GameApp:
             option_index = key - pygame.K_1
             choice = self._session.choose_option_by_index(option_index)
             if choice is not None:
+                self._audio.play_effect(choice.sfx, choice.label, choice.action_id)
                 resolution = self._session.apply_choice(choice)
                 if resolution.requires_immediate_ai:
                     self._submit_settlement_request(request_type="forced_immediate_choice")
@@ -635,8 +647,10 @@ class GameApp:
 
             if result.kind == "initial":
                 self._session.finish_initial_scene(result.scene)
+                self._audio.play_success("initial_scene_ready", result.scene.scene.bgm)
             else:
                 self._session.finish_settlement(result.scene)
+                self._audio.play_success("round_settled", result.scene.scene.bgm)
 
     def _update_active_interactable(self) -> None:
         if self._mode != "game" or self._session is None:
@@ -791,6 +805,7 @@ class GameApp:
 
         if self._mode == "main_menu":
             self._schedule_initial_scene_prefetch()
+            self._audio.sync_menu("main_menu")
             self._menu_renderer.draw_main_menu(
                 runtime_background,
                 list(MAIN_MENU_OPTIONS),
@@ -803,6 +818,7 @@ class GameApp:
 
         if self._mode == "story_browser":
             self._schedule_initial_scene_prefetch()
+            self._audio.sync_menu("story_browser")
             self._menu_renderer.draw_story_browser(
                 runtime_background,
                 self.current_story,
@@ -818,6 +834,7 @@ class GameApp:
 
         if self._mode == "settings":
             active_editor = self._input_editor
+            self._audio.sync_menu("settings")
             self._menu_renderer.draw_settings(
                 runtime_background,
                 list(SETTINGS_FIELDS),
@@ -840,6 +857,7 @@ class GameApp:
             self._return_to_main_menu()
             return
 
+        self._audio.sync_scene(self._session.current_scene)
         self._game_renderer.draw(
             self._session,
             self._ai_client.mode_label,
@@ -1056,6 +1074,7 @@ class GameApp:
         self._settings_draft = SettingsDraft.from_config(candidate, api_key)
         self._ai_client.close()
         self._ai_client = self._build_ai_client(candidate.ai)
+        self._audio.play_success("settings_saved")
         if self._status_text is None or "AI 配置不可用" not in self._status_text:
             self._status_text = "设置已保存。"
 

@@ -39,6 +39,7 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
                         "label": "戴上手套",
                         "action_id": "wear_gloves",
                         "resolution_mode": "local_rule",
+                        "sfx": "keys_rattle",
                         "local_logic": {
                             "requires_state": {"disabled": False},
                             "set_state": {"disabled": True},
@@ -71,7 +72,9 @@ def test_load_scene_payload_accepts_valid_schema() -> None:
     assert scene.npcs[1].patrol == ((240, 270), (420, 270))
     assert scene.interactables[0].options[0].action_id == "wear_gloves"
     assert scene.interactables[0].options[0].resolution_mode == "local_rule"
+    assert scene.interactables[0].options[0].sfx == "keys_rattle"
     assert scene.interactables[0].options[1].resolution_mode == "local_rule"
+    assert scene_to_dict(scene)["interactables"][0]["options"][0]["sfx"] == "keys_rattle"
     assert scene_to_dict(scene)["game_status"] == "ongoing"
 
 

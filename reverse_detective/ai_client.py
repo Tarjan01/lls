@@ -28,7 +28,7 @@ from reverse_detective.story_loader import (
 PROMPT_SCHEMA = {
     "scene": {
         "background_image": "mansion_study_room.png",
-        "bgm": "tense_loop.mp3",
+        "bgm": "tense_loop",
         "description": "string",
     },
     "npcs": [
@@ -57,6 +57,7 @@ PROMPT_SCHEMA = {
                     "label": "撬开门锁",
                     "action_id": "unlock_door",
                     "resolution_mode": "local_rule",
+                    "sfx": "lock_open",
                     "local_logic": {
                         "requires_state": {"locked": True},
                         "set_state": {"locked": False},
@@ -71,6 +72,22 @@ PROMPT_SCHEMA = {
     "game_status": "ongoing",
     "ending_text": None,
 }
+
+SUPPORTED_BGM_CUES = (
+    "menu_mystery",
+    "investigation_calm",
+    "tense_loop",
+    "ending_resolve",
+)
+SUPPORTED_SFX_CUES = (
+    "ui_confirm",
+    "ui_success",
+    "lock_open",
+    "door_open",
+    "keys_rattle",
+    "metal_hit",
+    "wood_slam",
+)
 
 LIVE_WORLD_WIDTH = 1280
 LIVE_WORLD_HEIGHT = 520
@@ -456,7 +473,7 @@ class ReverseDetectiveAIClient:
             "1. game_status must be one of ongoing, player_win, player_lose, special_ending.\n"
             "2. ending_text must be null when game_status is ongoing, otherwise it must contain a concrete ending text.\n"
             "3. Every interactable must include state with opened, locked, hidden, disabled booleans.\n"
-            "4. Every option must include resolution_mode and local_logic. resolution_mode must be local_rule or immediate_ai.\n"
+            "4. Every option must include resolution_mode, local_logic, and may include an sfx cue id. resolution_mode must be local_rule or immediate_ai.\n"
             "5. Prefer local_rule by default. Only mark an option as immediate_ai when it is a true key decision that can sharply change risk, social reaction, exposure, evidence, time jump, location jump, or branch outcome.\n"
             "6. Keep immediate_ai as a minority of the total options, but do not collapse the scene into one mandatory chokepoint. Most ongoing scenes should expose two to four meaningful key decision vectors across the scene.\n"
             "7. Good local_rule examples: unlocking, opening, searching, observing, picking up known tools, simple setup, repeatable checks, deterministic positioning and disguise work.\n"
@@ -477,8 +494,11 @@ class ReverseDetectiveAIClient:
             "22. Never imply top-down, overhead, bird's-eye, minimap, tactical-grid, or isometric map art. Asset hints must fit the local side/front-view library.\n"
             "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, locked_door.png, open_door.png, or window.png.\n"
             "24. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
-            "25. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
-            "26. All visible text content must be Simplified Chinese.\n"
+            f"25. scene.bgm must be a local music cue id, not a filename or URL. Prefer one of {', '.join(SUPPORTED_BGM_CUES)}.\n"
+            f"26. options[].sfx should be null or a local sound cue id. Prefer one of {', '.join(SUPPORTED_SFX_CUES)}.\n"
+            "27. Use quieter cues for setup and investigation, and stronger cues for confrontation, alarm, escape, or decisive actions.\n"
+            "28. narrative must describe the current situation, current time or phase when relevant, immediate risk, and the consequences of the pending key decisions.\n"
+            "29. All visible text content must be Simplified Chinese.\n"
         )
 
     def _build_user_prompt(self, request: AIRequestPayload) -> str:
@@ -521,6 +541,15 @@ class ReverseDetectiveAIClient:
                     "Keep them short, lowercase, descriptive, ASCII-only, and ending in .png. "
                     "Prefer the bundled 2.5D side/front-view library with upright characters and front/side props. "
                     "Never imply top-down, overhead, bird's-eye, or isometric art."
+                ),
+            },
+            "audio_guidance": {
+                "bgm_cues": list(SUPPORTED_BGM_CUES),
+                "sfx_cues": list(SUPPORTED_SFX_CUES),
+                "cue_rule": (
+                    "Return cue ids only. Do not return remote audio URLs, base64, or binary data. "
+                    "Prefer calm investigative bgm for setup scenes, tense bgm for risky scenes, "
+                    "ending_resolve for terminal scenes, and short sfx ids on options when a local effect is obvious."
                 ),
             },
             "premise": _premise_to_dict(request.premise),
@@ -1089,7 +1118,7 @@ class _MockStoryEngine:
         return {
             "scene": {
                 "background_image": "rainy_villa_hall.png",
-                "bgm": "tense_loop.mp3",
+                "bgm": "tense_loop",
                 "description": f"{premise.story_title} · 当前行动阶段",
             },
             "npcs": [
@@ -1305,7 +1334,7 @@ class _MockStoryEngine:
         return {
             "scene": {
                 "background_image": "front_gallery.png",
-                "bgm": "tense_loop.mp3",
+                "bgm": "investigation_calm",
                 "description": f"{premise.story_title} · 前厅假象",
             },
             "npcs": [
@@ -1393,7 +1422,7 @@ class _MockStoryEngine:
         return {
             "scene": {
                 "background_image": "rainy_villa_ending.png",
-                "bgm": "ending_resolve.mp3",
+                "bgm": "ending_resolve",
                 "description": f"{premise.story_title} · 结局",
             },
             "npcs": [
@@ -1445,6 +1474,7 @@ class _MockStoryEngine:
         set_state: dict[str, bool] | None = None,
         success_text: str | None = None,
         failure_text: str | None = None,
+        sfx: str | None = None,
     ) -> dict[str, Any]:
         local_logic = None
         if (
@@ -1474,8 +1504,41 @@ class _MockStoryEngine:
             "label": label,
             "action_id": action_id,
             "resolution_mode": resolution_mode,
+            "sfx": sfx or self._default_sfx_for_action(action_id, resolution_mode),
             "local_logic": local_logic,
         }
+
+    def _default_sfx_for_action(
+        self,
+        action_id: str,
+        resolution_mode: Literal["local_rule", "immediate_ai"],
+    ) -> str | None:
+        mapping = {
+            "unlock_tool": "lock_open",
+            "prepare_tool": "keys_rattle",
+            "open_support": "keys_rattle",
+            "prepare_support": "ui_success",
+            "inspect_lock": "ui_confirm",
+            "unlock_door": "lock_open",
+            "open_door": "door_open",
+            "wait": "ui_confirm",
+            "inspect_clue": "ui_confirm",
+            "ignore_clue": "ui_confirm",
+            "read_witness_route": "ui_confirm",
+            "stage_alibi": "metal_hit",
+            "lure_witness": "metal_hit",
+            "execute_clean": "wood_slam",
+            "execute_risky": "metal_hit",
+            "plant_register": "ui_confirm",
+            "pin_blame": "metal_hit",
+            "check_exit": "door_open",
+            "retreat_clean": "wood_slam",
+        }
+        if action_id in mapping:
+            return mapping[action_id]
+        if resolution_mode == "immediate_ai":
+            return "metal_hit"
+        return "ui_confirm"
 
     def _narrative_for_round(self, latest_action: str | None) -> str:
         narratives = {
