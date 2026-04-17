@@ -144,3 +144,46 @@ def test_renderer_draws_loading_overlay_with_text_history(
         assert any(channel > 0 for channel in pixel)
     finally:
         pygame.quit()
+
+
+def test_renderer_resolves_patrol_as_closed_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    pygame.init()
+    pygame.display.set_mode((1280, 720))
+    screen = pygame.display.get_surface()
+    assert screen is not None
+
+    renderer = Renderer(screen, 1280, 720, 520, asset_root=tmp_path)
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "silent.mp3",
+                "description": "巡逻闭环测试",
+            },
+            "npcs": [
+                {
+                    "id": "guard",
+                    "name": "守卫",
+                    "image": "npc.png",
+                    "position": [100, 100],
+                    "patrol": [[200, 100], [200, 200], [100, 200]],
+                }
+            ],
+            "interactables": [],
+            "narrative": "守卫应沿闭环路线巡逻。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    try:
+        position = renderer._resolve_npc_position(scene.npcs[0], 350.0 / 78.0)
+        assert position == (100, 150)
+    finally:
+        pygame.quit()

@@ -12,10 +12,46 @@
     "tags": ["室内", "书房", "办公室", "案发现场", "密室", "私人房间", "调查", "卷宗", "桌案", "vr房间"]
   },
   {
+    "id": "mansion_foyer_night",
+    "path": "backgrounds/mansion_foyer_night.webp",
+    "aliases": ["mansion_foyer_night.png", "mansion_foyer", "grand_foyer", "豪宅前厅", "宅邸门厅", "庄园门厅"],
+    "tags": ["室内", "豪宅", "宅邸", "前厅", "门厅", "楼梯", "夜晚", "古典", "庄园", "会客区"]
+  },
+  {
+    "id": "mansion_velvet_hallway",
+    "path": "backgrounds/mansion_velvet_hallway.webp",
+    "aliases": ["mansion_velvet_hallway.png", "velvet_hallway", "curtain_hall", "丝绒走廊", "红幕走廊", "宅邸长廊"],
+    "tags": ["室内", "豪宅", "宅邸", "走廊", "长廊", "红幕", "夜晚", "古典", "潜入", "过渡区域"]
+  },
+  {
+    "id": "mansion_basement_chamber",
+    "path": "backgrounds/mansion_basement_chamber.webp",
+    "aliases": ["mansion_basement_chamber.png", "basement_chamber", "cellar_room", "地下室", "地窖", "地下密室"],
+    "tags": ["室内", "豪宅", "地下室", "地窖", "密室", "昏暗", "夜晚", "调查", "储藏", "庄园"]
+  },
+  {
     "id": "security_control_room",
     "path": "backgrounds/security_control_room.png",
     "aliases": ["control_room", "security_room", "monitor_room", "surveillance_room", "别墅监控室", "安保室", "控制室"],
     "tags": ["室内", "监控", "控制室", "安保", "机房", "终端", "屏幕", "夜巡", "保安", "中控"]
+  },
+  {
+    "id": "cybernoir_control_desk",
+    "path": "backgrounds/cybernoir_control_desk.png",
+    "aliases": ["cybernoir_control_desk.png", "cyber_control_room", "terminal_room", "surveillance_terminal", "赛博控制间", "监控终端室", "数据终端间"],
+    "tags": ["室内", "赛博", "控制室", "终端", "监控", "电脑", "桌案", "夜晚", "现代", "调查"]
+  },
+  {
+    "id": "cybernoir_loft_lounge",
+    "path": "backgrounds/cybernoir_loft_lounge.png",
+    "aliases": ["cybernoir_loft_lounge.png", "cyber_loft", "apartment_lounge", "neon_lounge", "赛博公寓客厅", "公寓客厅", "霓虹客厅"],
+    "tags": ["室内", "赛博", "公寓", "客厅", "休息区", "霓虹", "夜晚", "现代", "都市", "noir"]
+  },
+  {
+    "id": "cybernoir_bunk_corridor",
+    "path": "backgrounds/cybernoir_bunk_corridor.png",
+    "aliases": ["cybernoir_bunk_corridor.png", "bunk_corridor", "crew_quarters", "capsule_hall", "宿舍走廊", "舱室走廊", "狭长公寓"],
+    "tags": ["室内", "赛博", "公寓", "走廊", "宿舍", "舱室", "狭窄", "夜晚", "现代", "潜入"]
   },
   {
     "id": "rainy_villa_ending",
@@ -46,6 +82,12 @@
     "path": "backgrounds/villa_exterior.png",
     "aliases": ["rainy_villa_exterior", "manor_exterior", "house_front", "estate_front", "听涛阁外景", "别墅门口", "赵家别墅外"],
     "tags": ["户外", "外景", "别墅外", "门口", "庄园", "雨夜", "到达", "离开", "夜晚", "建筑外立面"]
+  },
+  {
+    "id": "mansion_courtyard_gate",
+    "path": "backgrounds/mansion_courtyard_gate.webp",
+    "aliases": ["mansion_courtyard_gate.png", "courtyard_gate", "estate_gate", "庄园大门", "宅邸外门", "庭院入口"],
+    "tags": ["户外", "豪宅", "庄园", "大门", "外景", "夜晚", "到达", "离开", "庭院", "建筑外立面"]
   },
   {
     "id": "estate_garden",

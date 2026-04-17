@@ -1092,7 +1092,7 @@ class Renderer(TooltipMixin):
             return npc.position
 
         speed = 78.0
-        points = [npc.position, *npc.patrol]
+        points = [npc.position, *npc.patrol, npc.position]
         segments = list(zip(points, points[1:]))
         if not segments:
             return npc.position

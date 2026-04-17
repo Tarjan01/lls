@@ -505,7 +505,7 @@ class ReverseDetectiveAIClient:
             "20. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_villa_hall.png, detective.png, or tool_case.png.\n"
             "21. The bundled art library is 2.5D and stage-like: side-view or front-view rooms, upright characters, and front/side props with clear flat silhouettes.\n"
             "22. Never imply top-down, overhead, bird's-eye, minimap, tactical-grid, or isometric map art. Asset hints must fit the local side/front-view library.\n"
-            "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, locked_door.png, open_door.png, or window.png.\n"
+            "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, cybernoir_control_desk.png, cybernoir_loft_lounge.png, mansion_foyer_night.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, sealed_letter.png, brass_key.png, safe_box_closed.png, locked_door.png, open_door.png, or window.png.\n"
             "24. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
             f"25. scene.bgm must be a local music cue id, not a filename or URL. Prefer one of {', '.join(SUPPORTED_BGM_CUES)}.\n"
             "26. scene.bgm_tension must be one of low, medium, high, critical and should reflect suspense intensity.\n"

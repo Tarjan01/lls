@@ -19,6 +19,24 @@
       "tags": ["indoor", "control", "security", "surveillance", "sideview", "stage", "2_5d"]
     },
     {
+      "id": "cybernoir_control_desk",
+      "path": "backgrounds/cybernoir_control_desk.png",
+      "aliases": ["cybernoir_control_desk.png", "cyber_control_room", "terminal_room", "surveillance_terminal", "赛博控制间"],
+      "tags": ["indoor", "cyber", "control", "terminal", "monitoring", "desk", "modern", "night", "noir", "2_5d"]
+    },
+    {
+      "id": "cybernoir_loft_lounge",
+      "path": "backgrounds/cybernoir_loft_lounge.png",
+      "aliases": ["cybernoir_loft_lounge.png", "cyber_loft", "apartment_lounge", "neon_lounge", "赛博公寓客厅"],
+      "tags": ["indoor", "cyber", "apartment", "lounge", "living_room", "neon", "night", "modern", "noir", "2_5d"]
+    },
+    {
+      "id": "cybernoir_bunk_corridor",
+      "path": "backgrounds/cybernoir_bunk_corridor.png",
+      "aliases": ["cybernoir_bunk_corridor.png", "bunk_corridor", "crew_quarters", "capsule_hall", "宿舍走廊"],
+      "tags": ["indoor", "cyber", "apartment", "corridor", "bunks", "narrow", "night", "modern", "stealth", "2_5d"]
+    },
+    {
       "id": "gallery_surveillance_room",
       "path": "backgrounds/gallery_surveillance_room.png",
       "aliases": ["gallery_control_room", "gallery_security_room", "museum_monitor_room"],
@@ -29,6 +47,24 @@
       "path": "backgrounds/mansion_study_room.png",
       "aliases": ["study_room", "villa_study", "library_room", "manor_study", "office_room"],
       "tags": ["indoor", "study", "library", "office", "mansion", "sideview", "stage", "2_5d"]
+    },
+    {
+      "id": "mansion_foyer_night",
+      "path": "backgrounds/mansion_foyer_night.webp",
+      "aliases": ["mansion_foyer_night.png", "mansion_foyer", "grand_foyer", "豪宅前厅"],
+      "tags": ["indoor", "mansion", "foyer", "staircase", "night", "classical", "manor", "vn", "stage", "2_5d"]
+    },
+    {
+      "id": "mansion_velvet_hallway",
+      "path": "backgrounds/mansion_velvet_hallway.webp",
+      "aliases": ["mansion_velvet_hallway.png", "velvet_hallway", "curtain_hall", "丝绒走廊"],
+      "tags": ["indoor", "mansion", "hallway", "corridor", "velvet", "curtain", "night", "classical", "stealth", "2_5d"]
+    },
+    {
+      "id": "mansion_basement_chamber",
+      "path": "backgrounds/mansion_basement_chamber.webp",
+      "aliases": ["mansion_basement_chamber.png", "basement_chamber", "cellar_room", "地下室"],
+      "tags": ["indoor", "mansion", "basement", "cellar", "chamber", "dark", "night", "storage", "mystery", "2_5d"]
     },
     {
       "id": "gallery_inner_hall",
@@ -53,6 +89,12 @@
       "path": "backgrounds/villa_exterior.png",
       "aliases": ["rainy_villa_exterior", "manor_exterior", "house_front", "estate_front"],
       "tags": ["exterior", "villa", "manor", "outdoor", "frontview", "stage", "2_5d"]
+    },
+    {
+      "id": "mansion_courtyard_gate",
+      "path": "backgrounds/mansion_courtyard_gate.webp",
+      "aliases": ["mansion_courtyard_gate.png", "courtyard_gate", "estate_gate", "庄园大门"],
+      "tags": ["outdoor", "mansion", "courtyard", "gate", "arrival", "departure", "night", "classical", "frontview", "2_5d"]
     },
     {
       "id": "forest_edge",
@@ -137,10 +179,52 @@
       "tags": ["paper", "register", "desk_prop", "frontview"]
     },
     {
+      "id": "brass_key",
+      "path": "interactables/brass_key.png",
+      "aliases": ["key", "master_key", "room_key", "黄铜钥匙"],
+      "tags": ["key", "lock", "evidence", "clue", "metal", "frontview"]
+    },
+    {
+      "id": "padlock",
+      "path": "interactables/padlock.png",
+      "aliases": ["pad_lock", "locked_padlock", "door_lock", "挂锁"],
+      "tags": ["lock", "padlock", "locked", "security", "metal", "frontview"]
+    },
+    {
+      "id": "sealed_letter",
+      "path": "interactables/sealed_letter.png",
+      "aliases": ["letter", "closed_letter", "envelope", "密封信"],
+      "tags": ["paper", "letter", "envelope", "clue", "documents", "frontview"]
+    },
+    {
+      "id": "opened_letter",
+      "path": "interactables/opened_letter.png",
+      "aliases": ["open_letter", "read_letter", "opened_envelope", "拆开的信"],
+      "tags": ["paper", "letter", "evidence", "documents", "frontview"]
+    },
+    {
       "id": "control_console",
       "path": "interactables/control_console.png",
       "aliases": ["console", "control_panel", "tablet", "monitor", "terminal", "total_control_tablet"],
       "tags": ["console", "terminal", "electronic", "control", "system", "frontview"]
+    },
+    {
+      "id": "burner_phone",
+      "path": "interactables/burner_phone.png",
+      "aliases": ["phone", "mobile_phone", "burner", "burner_phone", "一次性手机"],
+      "tags": ["phone", "mobile", "electronics", "communication", "clue", "frontview"]
+    },
+    {
+      "id": "flashlight_on",
+      "path": "interactables/flashlight_on.png",
+      "aliases": ["flashlight", "torch", "inspection_light", "手电筒"],
+      "tags": ["light", "flashlight", "search", "tool", "frontview"]
+    },
+    {
+      "id": "magnifying_glass",
+      "path": "interactables/magnifying_glass.png",
+      "aliases": ["magnifier", "loupe", "inspection_glass", "放大镜"],
+      "tags": ["investigation", "magnifier", "clue", "detective", "frontview"]
     },
     {
       "id": "evidence_crate",
@@ -165,6 +249,24 @@
       "path": "interactables/tool_case.png",
       "aliases": ["toolkit", "tool_bag", "primary_tool", "equipment_case"],
       "tags": ["tool", "kit", "equipment", "case", "frontview"]
+    },
+    {
+      "id": "safe_box_closed",
+      "path": "interactables/safe_box_closed.png",
+      "aliases": ["safe_box", "safe", "lockbox", "保险箱"],
+      "tags": ["safe", "box", "container", "locked", "evidence", "frontview"]
+    },
+    {
+      "id": "safe_box_opened",
+      "path": "interactables/safe_box_opened.png",
+      "aliases": ["open_safe_box", "opened_safe", "unlocked_safe", "打开的保险箱"],
+      "tags": ["safe", "box", "container", "open", "evidence", "frontview"]
+    },
+    {
+      "id": "wallet_closed",
+      "path": "interactables/wallet_closed.png",
+      "aliases": ["wallet", "billfold", "leather_wallet", "钱包"],
+      "tags": ["wallet", "money", "id", "clue", "portable", "frontview"]
     },
     {
       "id": "support_kit",

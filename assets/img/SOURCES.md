@@ -1,77 +1,59 @@
 # Local Image Sources
 
-The checked-in runtime art under `assets/img` is still a temporary fallback library. It was assembled quickly from Kenney packs so the demo could stay playable while AI scene generation, caching, and UI iteration were still in flux.
+The checked-in runtime art under `assets/img` is now a curated mix. Backgrounds and detective props have started moving away from the older Kenney placeholders toward a colder noir presentation, while NPC sprites are still mostly temporary stand-ins.
 
-Temporary fallback packs currently in use:
+## Raw Package Storage
 
-- `Platformer Art Deluxe`
-  - Source: `https://kenney.nl/assets/platformer-art-deluxe`
-  - Current role: placeholder doors, windows, clocks, props, and modular room pieces.
-- `Platformer Characters`
-  - Source: `https://kenney.nl/assets/platformer-characters`
-  - Current role: placeholder upright character silhouettes and support references.
-- `Toon Characters`
-  - Source: `https://kenney.nl/assets/toon-characters-1`
-  - Current role: placeholder NPC sprites such as `detective.png`, `victim.png`, `witness.png`, `security_guard.png`.
-- `Background Elements`
-  - Source: `https://kenney.nl/assets/background-elements`
-  - Current role: placeholder environmental layers and exterior set dressing.
+Keep original downloads and extracted working files under `.tmp_assets/`:
 
-## Preferred Art Direction
+- raw archives: `.tmp_assets/external_sources/`
+- extracted curation workspace: `.tmp_assets/external_extract/`
 
-The next curation pass should stop leaning on bright cartoon packs and move toward a cooler, noir-leaning 2.5D presentation:
+Checked-in runtime files in `assets/img/` should stay filtered, renamed, and cataloged rather than mirroring whole third-party packs.
 
-- muted palette, high contrast, cleaner silhouettes
-- side/front-view or VN-style staged composition
-- crime, investigation, gallery, manor, security-room, basement, and urban-night moods
-- avoid chibi proportions and overtly toy-like props
+## Active Runtime Packs
 
-## Recommended Replacement Libraries
+### `CyberNoir - Apartment` by greenly
 
-These were selected as the best fit for the current detective/crime demo pipeline on 2026-04-17.
+- Source: `https://greenly.itch.io/cybernoir-apartment`
+- Local archive: `.tmp_assets/external_sources/greenly_cybernoir_apartment.zip`
+- Local extract root: `.tmp_assets/external_extract/greenly/CyberNoirApartment`
+- License note: `CC0`
+- Current runtime use:
+  - added scene variants: `cybernoir_loft_lounge.png`, `cybernoir_control_desk.png`, `cybernoir_bunk_corridor.png`
 
-### 1. Background library for manor / gallery / indoor mystery scenes
+### `Free Visual Novel Backgrounds (Mansion Pack)` by Potat0Master
 
-- `Free Visual Novel Backgrounds (Mansion Pack)` by Potat0Master
-  - Source: `https://potat0master.itch.io/free-visual-novel-backgrounds-mansion-pack`
-  - Why it fits: strong hall, foyer, basement, mansion exterior, and interior coverage; darker lighting variants; much closer to a crime-scene/VN backdrop than the current Kenney placeholders.
-  - Licensing notes from source page: royalty-free for personal and commercial projects; editing allowed; redistribution of the downloaded files is not allowed.
+- Source: `https://potat0master.itch.io/free-visual-novel-backgrounds-mansion-pack`
+- Local archive: `.tmp_assets/external_sources/potat0master_mansion_pack.zip`
+- Local extract root: `.tmp_assets/external_extract/potato/MansionUpdated_1080p_WEBP`
+- License note from source page: royalty-free for personal and commercial use, but do not redistribute the original downloaded pack
+- Current runtime use:
+  - `mansion_foyer_night.webp`
+  - `mansion_velvet_hallway.webp`
+  - `mansion_basement_chamber.webp`
+  - `mansion_courtyard_gate.webp`
 
-### 2. Background library for colder urban / surveillance / cyber-noir scenes
+### `Free Pixel Art 32x32 - Detective Mystery Pack` by Kabukidanshi
 
-- `CyberNoir - Apartment` by greenly
-  - Source: `https://greenly.itch.io/cybernoir-apartment`
-  - Why it fits: moody noir atmosphere, sharper visual-novel framing, and strong support for control-room, clinic, apartment, and dystopian investigation scenes.
-  - Licensing notes from source page: `CC0`.
+- Source: `https://kabukidanshi.itch.io/pixel-art-32x32-detective-mystery-pack`
+- Local archive: `.tmp_assets/external_sources/kabukidanshi_detective_mystery_pack.rar`
+- Local extract root: `.tmp_assets/external_extract/kabuki`
+- License note from source page: free for personal and commercial use with attribution; do not redistribute or resell the original pack
+- Current runtime use:
+  - previously curated exact copies: `case_file.png`, `guest_register.png`, `handgun_tool.png`, `knife_tool.png`, `locked_door.png`, `open_door.png`, `tool_case.png`, `window.png`
+  - added clue props: `brass_key.png`, `padlock.png`, `sealed_letter.png`, `opened_letter.png`, `flashlight_on.png`, `magnifying_glass.png`, `safe_box_closed.png`, `safe_box_opened.png`, `wallet_closed.png`, `burner_phone.png`
 
-### 3. Interactable prop library for clues / locks / crime-scene items
+## Still Temporary
 
-- `Free Pixel Art 32x32 - Detective Mystery Pack` by Kabukidanshi
-  - Source: `https://kabukidanshi.itch.io/pixel-art-32x32-detective-mystery-pack`
-  - Why it fits: includes clue-friendly detective props such as keys, flashlights, padlocks, files, letters, doors, knives, and blood-stain variants that map cleanly onto the current interactable schema.
-  - Licensing notes from source page: free for personal and commercial use with attribution; redistribution/resale not allowed.
+- `assets/img/npcs` remains mostly placeholder silhouette work and should be replaced later with a less cartoon character set.
+- Some older runtime backgrounds are still legacy exports or placeholder selections and can be phased out case by case.
 
-### 4. UI accent / portrait / icon library for a less cartoon detective tone
+## Pending Paid Pack
 
 - `Pixel Art Detective Icon & Character Asset Pack` by howdy riceball
   - Source: `https://howdyriceball.itch.io/pixel-art-detective-icon-asset-pack`
-  - Why it fits: compact noir/detective-oriented icons plus character material suitable for menu overlays, dossier panels, and side portraits.
-  - Licensing notes from source page: `CC BY 4.0`, paid pack.
+  - Status: not checked in; purchase/download required before runtime integration
 - `Detective Hand Drawn Icons Asset Pack` by howdy riceball
   - Source: `https://howdyriceball.itch.io/detective-hand-drawn-icons-asset-pack`
-  - Why it fits: useful for case-board UI, notebook tabs, evidence panels, and menu accents when the pixel set feels too game-jam-like.
-  - Licensing notes from source page: `CC BY-SA 4.0`, paid pack.
-
-## Planned Runtime Mapping
-
-When the placeholder art is replaced, the local asset resolver should be curated along these lines:
-
-- `assets/img/backgrounds`: primarily Potat0Master mansion scenes, with greenly noir scenes for more modern or urban cases.
-- `assets/img/interactables`: primarily Kabukidanshi detective props.
-- `assets/img/npcs`: curated portrait/silhouette exports from the chosen VN-style or noir character packs.
-- menu/backdrop overlays: a dimmed protagonist portrait plus noir icon accents, rather than bright cartoon character cutouts.
-
-## Runtime Notes
-
-- `assets/img/catalog.json` is already structured so the art swap can stay data-driven once replacement files are curated locally.
-- Raw downloaded packs should stay under `.tmp_assets/` for curation only and should not be used directly at runtime without filtering, renaming, and catalog tagging.
+  - Status: only a local preview/demo image is currently present as `assets/img/ui/detective_handdrawn_demo.png`

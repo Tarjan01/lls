@@ -24,6 +24,7 @@ def test_load_game_background_reads_global_background_file() -> None:
 
     assert background.operator_name == "江川"
     assert "扮演凶手" in background.background
+    assert "零" in background.background
     assert "案件模拟台" in background.menu_intro
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from reverse_detective.utils.assets import resolve_asset_path
+from reverse_detective.utils.assets import DEFAULT_ASSET_LIBRARY_ROOT, resolve_asset_path
 
 
 def test_resolve_asset_path_matches_catalog_alias(tmp_path: Path) -> None:
@@ -99,3 +99,41 @@ def test_resolve_asset_path_returns_normalized_target_when_catalog_misses(tmp_pa
     resolved = resolve_asset_path("interactable", "Unknown Tool.PNG", tmp_path)
 
     assert resolved == (tmp_path / "interactables" / "unknown_tool.png").resolve()
+
+
+def test_repo_asset_library_resolves_png_hint_to_curated_webp_background() -> None:
+    resolved = resolve_asset_path(
+        "background",
+        "mansion_foyer_night.png",
+        DEFAULT_ASSET_LIBRARY_ROOT,
+    )
+
+    assert resolved == (
+        DEFAULT_ASSET_LIBRARY_ROOT / "backgrounds" / "mansion_foyer_night.webp"
+    ).resolve()
+
+
+def test_repo_asset_library_resolves_curated_cybernoir_background_from_chinese_hint() -> None:
+    resolved = resolve_asset_path(
+        "background",
+        "bg.png",
+        DEFAULT_ASSET_LIBRARY_ROOT,
+        "赛博控制间",
+    )
+
+    assert resolved == (
+        DEFAULT_ASSET_LIBRARY_ROOT / "backgrounds" / "cybernoir_control_desk.png"
+    ).resolve()
+
+
+def test_repo_asset_catalog_resolves_new_detective_prop_alias() -> None:
+    resolved = resolve_asset_path(
+        "interactable",
+        "evidence_item.png",
+        DEFAULT_ASSET_LIBRARY_ROOT,
+        "黄铜钥匙",
+    )
+
+    assert resolved == (
+        DEFAULT_ASSET_LIBRARY_ROOT / "interactables" / "brass_key.png"
+    ).resolve()
