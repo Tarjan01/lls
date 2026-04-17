@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from pathlib import Path
 from queue import Empty, Queue
 import threading
 from typing import Literal
@@ -21,6 +22,13 @@ from reverse_detective.config import (
     save_api_key,
     save_config,
 )
+from reverse_detective.custom_story import (
+    CustomStoryDraft,
+    DEFAULT_CUSTOM_DETECTIVE_IDENTITY,
+    DEFAULT_CUSTOM_STORY_SUBTITLE,
+    validate_custom_story_draft,
+    write_custom_story,
+)
 from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import (
     GameBackgroundDefinition,
@@ -31,7 +39,13 @@ from reverse_detective.models import (
     StoryRole,
 )
 from reverse_detective.renderer import MenuRenderer, Renderer
-from reverse_detective.story_loader import build_story_premise, load_game_background, load_story_catalog
+from reverse_detective.story_loader import (
+    BACKGROUND_FILE_NAME,
+    DEFAULT_STORIES_DIR,
+    build_story_premise,
+    load_game_background,
+    load_story_catalog,
+)
 from reverse_detective.utils.text_input import TextInputSession
 
 
@@ -39,7 +53,7 @@ PLAY_AREA_HEIGHT = 520
 PLAYER_SIZE = (42, 62)
 PLAYER_SPEED = 240.0
 TEXT_INPUT_RECT = pygame.Rect(248, 236, 784, 180)
-MAIN_MENU_OPTIONS = ("开始游戏", "选项设置", "退出游戏")
+MAIN_MENU_OPTIONS = ("开始游戏", "自定义剧本", "选项设置", "退出游戏")
 PLAYER_AVATAR_OPTIONS = ("male", "female")
 SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("window_title", "窗口标题", "text"),
@@ -56,7 +70,19 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("fallback_to_mock_on_error", "请求失败时回退 Mock", "bool"),
 )
 
-MenuMode = Literal["main_menu", "story_browser", "settings", "game"]
+CUSTOM_STORY_FIELDS: tuple[tuple[str, str, str], ...] = (
+    ("title", "卷宗标题", "text"),
+    ("subtitle", "副标题", "text"),
+    ("location", "案发地点", "text"),
+    ("victim_name", "死者姓名", "text"),
+    ("victim_identity", "死者身份", "text"),
+    ("detective_identity", "追查者身份", "text"),
+    ("setting", "场景设定", "multiline"),
+    ("core_case", "核心案情", "multiline"),
+    ("opening_hook", "开场钩子", "multiline"),
+)
+
+MenuMode = Literal["main_menu", "story_browser", "settings", "custom_story", "game"]
 BrowserFocus = Literal["story", "role"]
 
 
@@ -146,10 +172,13 @@ class SettingsDraft:
 class GameApp:
     """Main game application with menu flow, settings and background scene generation."""
 
-    def __init__(self, config: AppConfig):
+    def __init__(self, config: AppConfig, *, stories_dir: Path | None = None):
         self._config = config
-        self._background: GameBackgroundDefinition = load_game_background()
-        self._stories = load_story_catalog()
+        self._stories_dir = (stories_dir or DEFAULT_STORIES_DIR).resolve()
+        self._background: GameBackgroundDefinition = load_game_background(
+            self._stories_dir / BACKGROUND_FILE_NAME
+        )
+        self._stories = load_story_catalog(self._stories_dir)
         self._menu_selection = MenuSelection(story_index=0, role_index=0)
         self._main_menu_index = 0
         self._story_focus: BrowserFocus = "story"
@@ -162,12 +191,14 @@ class GameApp:
         self._running = True
         self._request_serial = 0
         self._settings_index = 0
+        self._custom_story_index = 0
         self._input_editor: TextInputSession | None = None
         self._status_text: str | None = None
         self._settings_draft = SettingsDraft.from_config(
             config,
             load_api_key(config.ai.credentials_path, config.ai.provider),
         )
+        self._custom_story_draft = CustomStoryDraft.blank()
 
         pygame.init()
         pygame.display.set_caption(config.display.title)
@@ -255,6 +286,10 @@ class GameApp:
             self._handle_settings_keydown(key)
             return
 
+        if self._mode == "custom_story":
+            self._handle_custom_story_keydown(key)
+            return
+
         self._handle_game_keydown(key)
 
     def _handle_mousebuttondown(self, button: int, position: tuple[int, int]) -> None:
@@ -311,6 +346,8 @@ class GameApp:
         if self._main_menu_index == 0:
             self._enter_story_browser()
         elif self._main_menu_index == 1:
+            self._enter_custom_story()
+        elif self._main_menu_index == 2:
             self._enter_settings()
         else:
             self._running = False
@@ -400,6 +437,41 @@ class GameApp:
         if key == pygame.K_d:
             self._reset_settings_draft("已放弃未保存的修改")
 
+    def _handle_custom_story_keydown(self, key: int) -> None:
+        field_name, _, field_kind = CUSTOM_STORY_FIELDS[self._custom_story_index]
+
+        if key == pygame.K_UP:
+            self._custom_story_index = (self._custom_story_index - 1) % len(CUSTOM_STORY_FIELDS)
+            return
+
+        if key == pygame.K_DOWN:
+            self._custom_story_index = (self._custom_story_index + 1) % len(CUSTOM_STORY_FIELDS)
+            return
+
+        if key == pygame.K_BACKSPACE:
+            self._return_to_main_menu()
+            return
+
+        if key == pygame.K_s:
+            self._save_custom_story()
+            return
+
+        if key == pygame.K_d:
+            self._reset_custom_story_draft("已放弃未保存的自定义卷宗。")
+            return
+
+        if key != pygame.K_RETURN:
+            return
+
+        self._begin_input_edit(
+            field_name=field_name,
+            title=self._custom_story_field_label(field_name),
+            value=str(getattr(self._custom_story_draft, field_name)),
+            multiline=field_kind == "multiline",
+            max_length=1200 if field_kind == "multiline" else 120,
+            hint_text=self._custom_story_input_hint(field_name),
+        )
+
     def _handle_input_keydown(self, key: int, text: str) -> None:
         editor = self._input_editor
         if editor is None:
@@ -407,7 +479,7 @@ class GameApp:
 
         if key == pygame.K_ESCAPE:
             self._cancel_input_edit()
-            self._status_text = "??????"
+            self._status_text = "已取消输入。"
             return
 
         if key == pygame.K_v and (pygame.key.get_mods() & pygame.KMOD_CTRL):
@@ -853,6 +925,28 @@ class GameApp:
             )
             return
 
+        if self._mode == "custom_story":
+            active_editor = self._input_editor
+            self._audio.sync_menu("custom_story")
+            self._menu_renderer.draw_custom_story_editor(
+                runtime_background,
+                list(CUSTOM_STORY_FIELDS),
+                self._custom_story_index,
+                self._custom_story_draft,
+                None if active_editor is None else active_editor.field_name,
+                "" if active_editor is None else active_editor.value,
+                self._status_text,
+                generated_story_id=self._custom_story_preview_story_id(),
+                input_hint="" if active_editor is None else active_editor.hint_text,
+                input_composition="" if active_editor is None else active_editor.composition,
+                input_cursor=0 if active_editor is None else active_editor.cursor,
+                input_multiline=False if active_editor is None else active_editor.multiline,
+                input_secret=False if active_editor is None else active_editor.secret,
+                operator_portrait_name=runtime_operator_name,
+                operator_portrait_gender=runtime_avatar_gender,
+            )
+            return
+
         if self._session is None or self._premise is None:
             self._return_to_main_menu()
             return
@@ -879,6 +973,13 @@ class GameApp:
         self._detail_modal = None
         self._clear_selected_text_readers()
         self._reset_settings_draft()
+
+    def _enter_custom_story(self) -> None:
+        self._mode = "custom_story"
+        self._custom_story_index = 0
+        self._detail_modal = None
+        self._clear_selected_text_readers()
+        self._reset_custom_story_draft()
 
     def _start_selected_story(self) -> None:
         self._detail_modal = None
@@ -973,6 +1074,13 @@ class GameApp:
         self._cancel_input_edit()
 
         try:
+            if self._is_custom_story_field(field_name):
+                value = self._validate_custom_story_field(field_name, raw_value)
+                setattr(self._custom_story_draft, field_name, value)
+                self._status_text = (
+                    f"{self._custom_story_field_label(field_name)}已更新，按 S 保存自定义卷宗。"
+                )
+                return
             if field_name == "window_title":
                 value = raw_value.strip()
                 if not value:
@@ -1099,6 +1207,87 @@ class GameApp:
         )
         return self._settings_draft != current
 
+    def _reset_custom_story_draft(self, status_text: str | None = None) -> None:
+        self._cancel_input_edit()
+        self._custom_story_draft = CustomStoryDraft(
+            subtitle=DEFAULT_CUSTOM_STORY_SUBTITLE,
+            detective_identity=DEFAULT_CUSTOM_DETECTIVE_IDENTITY,
+        )
+        if status_text is not None:
+            self._status_text = status_text
+
+    def _save_custom_story(self) -> None:
+        try:
+            validate_custom_story_draft(self._custom_story_draft)
+            _, story_id = write_custom_story(
+                self._custom_story_draft,
+                detective_name=self._runtime_operator_name(),
+                stories_dir=self._stories_dir,
+            )
+        except ValueError as exc:
+            self._status_text = str(exc)
+            return
+        except OSError as exc:
+            self._status_text = f"保存自定义卷宗失败: {exc}"
+            return
+
+        self._stories = load_story_catalog(self._stories_dir)
+        story_index = next(
+            (
+                index
+                for index, story in enumerate(self._stories)
+                if story.id == story_id
+            ),
+            0,
+        )
+        self._menu_selection = MenuSelection(story_index=story_index, role_index=0)
+        self._mode = "story_browser"
+        self._detail_modal = None
+        self._clear_selected_text_readers()
+        self._schedule_initial_scene_prefetch()
+        self._audio.play_success("custom_story_saved")
+        self._status_text = f"已保存自定义卷宗：{self._stories[story_index].title}"
+
+    def _is_custom_story_field(self, field_name: str) -> bool:
+        return any(candidate_name == field_name for candidate_name, _, _ in CUSTOM_STORY_FIELDS)
+
+    def _validate_custom_story_field(self, field_name: str, raw_value: str) -> str:
+        if field_name in {"subtitle", "detective_identity"}:
+            cleaned = raw_value.strip()
+            if field_name == "subtitle":
+                return cleaned or DEFAULT_CUSTOM_STORY_SUBTITLE
+            return cleaned or DEFAULT_CUSTOM_DETECTIVE_IDENTITY
+
+        if field_name in {"setting", "core_case", "opening_hook"}:
+            return raw_value.strip()
+
+        return raw_value.replace("\r", " ").replace("\n", " ").strip()
+
+    def _custom_story_field_label(self, field_name: str) -> str:
+        for candidate_name, label, _ in CUSTOM_STORY_FIELDS:
+            if candidate_name == field_name:
+                return label
+        return field_name
+
+    def _custom_story_input_hint(self, field_name: str) -> str:
+        hints = {
+            "title": "输入卷宗主标题，保存后会自动生成一个新的剧本目录。",
+            "subtitle": "用于卷宗列表展示，可以写案件副标题或风格标签。",
+            "location": "输入案发地点或核心舞台，例如剧院后台、私人美术馆、海边别墅。",
+            "victim_name": "输入死者姓名，支持中文输入法。",
+            "victim_identity": "说明死者身份、职业或社会地位。",
+            "detective_identity": "说明追查者身份，默认会作为复盘侦探显示。",
+            "setting": "写清楚场景背景、当前局势与关键限制。支持多行输入。",
+            "core_case": "概括案件本身和玩家要逆向重演的核心矛盾。支持多行输入。",
+            "opening_hook": "写一个能直接把玩家拉进案发前最后时刻的开场描述。支持多行输入。",
+        }
+        return hints.get(field_name, "支持中文输入、方向键移动光标和 Ctrl+V 粘贴。")
+
+    def _custom_story_preview_story_id(self) -> str:
+        if not self._custom_story_draft.title.strip():
+            return "保存时自动生成唯一目录名"
+        return "保存后会生成 stories/<自动目录>/story.json"
+
     def _build_ai_client(self, ai_config: AIConfig) -> ReverseDetectiveAIClient:
         try:
             return ReverseDetectiveAIClient(ai_config)
@@ -1122,7 +1311,7 @@ class GameApp:
             return None
         if self._mode == "game":
             return self._game_renderer
-        if self._mode in {"main_menu", "story_browser", "settings"}:
+        if self._mode in {"main_menu", "story_browser", "settings", "custom_story"}:
             return self._menu_renderer
         return None
 

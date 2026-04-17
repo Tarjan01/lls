@@ -43,6 +43,7 @@ class AudioController:
             "main_menu": MENU_BGM_CUE,
             "settings": SETTINGS_BGM_CUE,
             "story_browser": STORY_BROWSER_BGM_CUE,
+            "custom_story": MENU_BGM_CUE,
         }.get(menu_kind, MENU_BGM_CUE)
         self._play_music(cue, menu_kind)
 
@@ -107,4 +108,3 @@ class AudioController:
             return None
         self._sound_cache[sound_path] = sound
         return sound
-

@@ -1332,8 +1332,8 @@ class MenuRenderer(TooltipMixin):
         rows_per_column = max(1, math.ceil(len(fields) / column_count))
         available_width = panel.width - 48 - column_gap * (column_count - 1)
         column_width = max(280, available_width // column_count)
-        row_height = 42
-        row_gap = 10
+        row_height = 36
+        row_gap = 8
 
         for index, (field_name, label, field_kind) in enumerate(fields):
             column_index = index // rows_per_column
@@ -1355,7 +1355,7 @@ class MenuRenderer(TooltipMixin):
             self._blit_clamped_line(
                 self._small_font,
                 label,
-                (row.x + 14, row.y + 11),
+                (row.x + 14, row.y + 8),
                 text_color,
                 max(120, row.width // 2 - 18),
                 selected=selected,
@@ -1386,6 +1386,179 @@ class MenuRenderer(TooltipMixin):
             line_gap=5,
         )
         footer = "设置页控制: 上下切换 | Enter 编辑/切换 | 左右切换布尔值 | S 保存 | D 放弃修改 | Backspace 返回"
+        self._draw_footer(footer, status_text)
+
+        if editing_field is not None:
+            self._draw_input_modal(
+                title=self._field_label(editing_field, fields),
+                value=input_buffer,
+                masked=input_secret,
+                hint_text=input_hint,
+                composition=input_composition,
+                cursor_index=input_cursor,
+                multiline=input_multiline,
+            )
+        self._draw_tooltip_overlay()
+        pygame.display.flip()
+
+    def draw_custom_story_editor(
+        self,
+        background: Any,
+        fields: list[tuple[str, str, str]],
+        selected_index: int,
+        draft: Any,
+        editing_field: str | None,
+        input_buffer: str,
+        status_text: str | None,
+        *,
+        generated_story_id: str,
+        input_hint: str = "",
+        input_composition: str = "",
+        input_cursor: int = 0,
+        input_multiline: bool = False,
+        input_secret: bool = False,
+        operator_portrait_name: str | None = None,
+        operator_portrait_gender: str = "male",
+    ) -> None:
+        self._begin_tooltip_frame()
+        self._draw_background(
+            operator_portrait_name=operator_portrait_name,
+            operator_portrait_gender=operator_portrait_gender,
+        )
+        self._draw_chrome(background.game_title, "自定义剧本", background.operator_name)
+
+        left = pygame.Rect(56, 126, 564, 520)
+        right = pygame.Rect(646, 126, 556, 520)
+        self._panel(left, (16, 21, 28))
+        self._panel(right, (27, 22, 19))
+
+        self._section_title("卷宗表单", left.x + 22, left.y + 18)
+        self._blit_clamped_line(
+            self._small_font,
+            "逐项填写后按 S 保存。系统会自动生成一套可游玩的默认嫌疑人身份。",
+            (left.x + 24, left.y + 56),
+            (219, 224, 231),
+            left.width - 48,
+        )
+
+        row_height = 36
+        row_gap = 8
+        for index, (field_name, label, field_kind) in enumerate(fields):
+            row = pygame.Rect(
+                left.x + 22,
+                left.y + 96 + index * (row_height + row_gap),
+                left.width - 44,
+                row_height,
+            )
+            selected = index == selected_index
+            fill = (228, 193, 127) if selected else (34, 41, 52)
+            border = (244, 227, 192) if selected else (97, 109, 123)
+            text_color = (28, 22, 15) if selected else (236, 240, 245)
+            pygame.draw.rect(self._surface, fill, row, border_radius=12)
+            pygame.draw.rect(self._surface, border, row, width=2, border_radius=12)
+
+            raw_value = str(getattr(draft, field_name)).strip()
+            full_value = raw_value if raw_value else "(待填写)"
+            if field_kind == "multiline":
+                compact_value = " / ".join(part.strip() for part in raw_value.splitlines() if part.strip())
+                display_value = compact_value or "(待填写)"
+            else:
+                display_value = full_value
+
+            self._blit_clamped_line(
+                self._small_font,
+                label,
+                (row.x + 14, row.y + 8),
+                text_color,
+                140,
+                selected=selected,
+            )
+            self._blit_clamped_line(
+                self._small_font,
+                display_value,
+                (row.x + 156, row.y + 8),
+                text_color,
+                row.width - 172,
+                selected=selected,
+                tooltip_text=f"{label}: {full_value}",
+            )
+            self._register_tooltip(
+                row,
+                f"{label}\n{full_value}",
+                selected=selected,
+                preferred_width=max(340, row.width),
+            )
+
+        self._section_title("卷宗预览", right.x + 22, right.y + 18)
+        self._blit_clamped_line(
+            self._small_font,
+            f"保存路径: {generated_story_id}",
+            (right.x + 24, right.y + 56),
+            (228, 194, 131),
+            right.width - 48,
+        )
+
+        preview_card = pygame.Rect(right.x + 22, right.y + 88, right.width - 44, 348)
+        pygame.draw.rect(self._surface, (33, 37, 46), preview_card, border_radius=18)
+        pygame.draw.rect(self._surface, (120, 106, 92), preview_card, width=2, border_radius=18)
+
+        story_title = str(getattr(draft, "title", "")).strip() or "未命名卷宗"
+        story_subtitle = str(getattr(draft, "subtitle", "")).strip() or "等待补充副标题"
+        self._blit_clamped_line(
+            self._title_font,
+            story_title,
+            (preview_card.x + 18, preview_card.y + 16),
+            (244, 240, 233),
+            preview_card.width - 36,
+        )
+        self._blit_clamped_line(
+            self._small_font,
+            story_subtitle,
+            (preview_card.x + 18, preview_card.y + 52),
+            (228, 194, 131),
+            preview_card.width - 36,
+        )
+
+        preview_blocks = [
+            f"地点: {str(getattr(draft, 'location', '')).strip() or '待填写'}",
+            (
+                "死者: "
+                f"{str(getattr(draft, 'victim_name', '')).strip() or '待填写'} / "
+                f"{str(getattr(draft, 'victim_identity', '')).strip() or '待填写'}"
+            ),
+            str(getattr(draft, "setting", "")).strip() or "场景设定待填写。",
+            str(getattr(draft, "core_case", "")).strip() or "核心案情待填写。",
+            str(getattr(draft, "opening_hook", "")).strip() or "开场钩子待填写。",
+        ]
+        y = preview_card.y + 88
+        for block in preview_blocks:
+            block_rect = self._blit_preview_block(
+                self._small_font,
+                block,
+                (preview_card.x + 18, y),
+                (225, 229, 235),
+                preview_card.width - 36,
+                4,
+                line_gap=4,
+            )
+            y += block_rect.height + 12
+            if y > preview_card.bottom - 48:
+                break
+
+        tips = [
+            "保存后自动生成 4 个默认身份：内部人 / 竞争者 / 近身顾问 / 专业人士。",
+            "这些身份会共享你填写的背景信息，但各自拥有不同的动机、工具和隐藏目标。",
+            "长文本被截断时，可以用鼠标点中对应字段，在右下角全文面板里查看。",
+        ]
+        self._blit_clamped_lines(
+            tips,
+            self._small_font,
+            (right.x + 24, right.y + 458),
+            (230, 210, 167),
+            right.width - 48,
+            line_gap=5,
+        )
+        footer = "自定义剧本: 上下切换 | Enter 编辑 | S 保存 | D 重置 | Backspace 返回"
         self._draw_footer(footer, status_text)
 
         if editing_field is not None:
@@ -1755,9 +1928,9 @@ class MenuRenderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "?????????? | Ctrl+V ?? | Esc ??"
+            "回车确认输入 | Ctrl+V 粘贴 | Esc 取消"
             if not multiline
-            else "?????????? | Ctrl+V ?? | Ctrl+Enter ?? | Esc ??",
+            else "回车换行 | Ctrl+V 粘贴 | Ctrl+Enter 确认 | Esc 取消",
             (rect.x + 24, rect.y + 56),
             (220, 223, 232),
             rect.width - 48,
@@ -1801,7 +1974,7 @@ class MenuRenderer(TooltipMixin):
         if composition:
             self._blit_clamped_line(
                 self._small_font,
-                f"????: {composition}",
+                f"输入法预编辑: {composition}",
                 (rect.x + 24, footer_y),
                 (235, 202, 140),
                 rect.width - 48,
@@ -1878,8 +2051,9 @@ class MenuRenderer(TooltipMixin):
 
     def _main_menu_hint(self, option: str) -> str:
         hints = {
-            "开始游戏": "进入卷宗选择，查看简介并决定要扮演的身份。",
-            "选项设置": "调整请求 URL、API Key、模型与基础运行参数。",
+            "开始游戏": "进入卷宗选择，浏览简介后开始当前案件的重演。",
+            "自定义剧本": "填写一份新的案件设定，并自动生成可游玩的默认身份与评分规则。",
+            "选项设置": "调整请求 URL、API Key、模型、超时和主控相关设置。",
             "退出游戏": "关闭案件模拟台。",
         }
         return hints.get(option, "")
