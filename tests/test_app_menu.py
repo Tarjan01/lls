@@ -189,3 +189,36 @@ def test_textinput_updates_editor_for_chinese_input(monkeypatch: pytest.MonkeyPa
         assert app._input_editor.composition == ""
     finally:
         pygame.quit()
+
+
+def test_begin_input_edit_sets_dynamic_text_input_rect(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    captured: list[pygame.Rect] = []
+    original = pygame.key.set_text_input_rect
+
+    def fake_set_text_input_rect(rect: pygame.Rect) -> None:
+        captured.append(rect.copy())
+        original(rect)
+
+    monkeypatch.setattr(pygame.key, "set_text_input_rect", fake_set_text_input_rect)
+
+    app = GameApp(load_config())
+    try:
+        app._begin_input_edit(
+            field_name="detective_name",
+            title="侦探名字",
+            value="",
+        )
+        app._begin_input_edit(
+            field_name="__freeform_action__",
+            title="自由行动",
+            value="",
+            multiline=True,
+        )
+
+        assert captured[0] == pygame.Rect(258, 312, app._config.display.width - 516, 52)
+        assert captured[1] == pygame.Rect(258, 300, app._config.display.width - 516, 92)
+    finally:
+        pygame.quit()

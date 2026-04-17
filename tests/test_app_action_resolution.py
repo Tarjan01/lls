@@ -147,3 +147,49 @@ def test_game_app_routes_arrow_keys_to_selected_text_panel(
         assert scrolled == [1, -1]
     finally:
         pygame.quit()
+
+
+def test_game_app_submits_freeform_action_for_immediate_ai(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    triggered: dict[str, str] = {}
+    premise = build_default_premise()
+    scene = load_scene_payload(
+        {
+            "scene": {
+                "background_image": "bg.png",
+                "bgm": "bgm.mp3",
+                "description": "自由行动测试",
+            },
+            "npcs": [],
+            "interactables": [],
+            "narrative": "玩家准备提交一条额外行动。",
+            "game_status": "ongoing",
+            "ending_text": None,
+        }
+    )
+
+    def fake_submit_settlement_request(
+        *,
+        request_type: str = "round_settlement",
+    ) -> None:
+        triggered["request_type"] = request_type
+
+    app._submit_settlement_request = fake_submit_settlement_request  # type: ignore[method-assign]
+    app._premise = premise
+    app._session = GameSessionState.create(premise)
+    app._session.finish_initial_scene(scene)
+    app._mode = "game"
+
+    try:
+        app._submit_freeform_action("伪装成馆员去套话")
+
+        assert triggered["request_type"] == "freeform_action"
+        assert app._session.round_actions[-1].action_id == "player_freeform_action"
+        assert app._session.round_actions[-1].freeform_text == "伪装成馆员去套话"
+    finally:
+        pygame.quit()

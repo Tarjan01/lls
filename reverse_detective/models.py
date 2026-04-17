@@ -7,6 +7,7 @@ from typing import Literal, Mapping
 
 GameStatus = Literal["ongoing", "player_win", "player_lose", "special_ending"]
 ActionResolutionMode = Literal["local_rule", "immediate_ai"]
+BgmTension = Literal["low", "medium", "high", "critical"]
 Point = tuple[int, int]
 PatrolPath = tuple[Point, ...]
 
@@ -16,6 +17,7 @@ class SceneBackdrop:
     background_image: str
     bgm: str
     description: str
+    bgm_tension: BgmTension = "medium"
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +212,8 @@ class ActionRecord:
     label: str
     action_id: str
     resolution_mode: ActionResolutionMode = "local_rule"
+    source: Literal["scene_option", "custom_action"] = "scene_option"
+    freeform_text: str | None = None
 
 
 def build_loading_scene(narrative: str = "案件生成中，请稍候。") -> SceneState:

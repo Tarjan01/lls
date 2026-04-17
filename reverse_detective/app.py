@@ -24,8 +24,14 @@ from reverse_detective.config import (
 )
 from reverse_detective.custom_story import (
     CustomStoryDraft,
+    CustomStoryEditorField,
     DEFAULT_CUSTOM_DETECTIVE_IDENTITY,
     DEFAULT_CUSTOM_STORY_SUBTITLE,
+    apply_custom_story_action,
+    build_custom_story_editor_fields,
+    is_custom_story_editor_key,
+    remove_custom_story_field,
+    update_custom_story_field,
     validate_custom_story_draft,
     write_custom_story,
 )
@@ -52,7 +58,6 @@ from reverse_detective.utils.text_input import TextInputSession
 PLAY_AREA_HEIGHT = 520
 PLAYER_SIZE = (42, 62)
 PLAYER_SPEED = 240.0
-TEXT_INPUT_RECT = pygame.Rect(248, 236, 784, 180)
 MAIN_MENU_OPTIONS = ("开始游戏", "自定义剧本", "选项设置", "退出游戏")
 PLAYER_AVATAR_OPTIONS = ("male", "female")
 SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
@@ -68,18 +73,6 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("disable_response_storage", "禁用响应存储", "bool"),
     ("use_mock_when_unconfigured", "未配置时使用本地 Mock", "bool"),
     ("fallback_to_mock_on_error", "请求失败时回退 Mock", "bool"),
-)
-
-CUSTOM_STORY_FIELDS: tuple[tuple[str, str, str], ...] = (
-    ("title", "卷宗标题", "text"),
-    ("subtitle", "副标题", "text"),
-    ("location", "案发地点", "text"),
-    ("victim_name", "死者姓名", "text"),
-    ("victim_identity", "死者身份", "text"),
-    ("detective_identity", "追查者身份", "text"),
-    ("setting", "场景设定", "multiline"),
-    ("core_case", "核心案情", "multiline"),
-    ("opening_hook", "开场钩子", "multiline"),
 )
 
 MenuMode = Literal["main_menu", "story_browser", "settings", "custom_story", "game"]
@@ -297,6 +290,11 @@ class GameApp:
             return
 
         if button == 1:
+            if self._mode == "game":
+                action = self._game_renderer.consume_action_click(position)
+                if action == "open_freeform_action":
+                    self._begin_freeform_action_input()
+                    return
             renderer = self._active_text_renderer()
             if renderer is not None and renderer.handle_text_selection_click(position):
                 return
@@ -438,14 +436,18 @@ class GameApp:
             self._reset_settings_draft("已放弃未保存的修改")
 
     def _handle_custom_story_keydown(self, key: int) -> None:
-        field_name, _, field_kind = CUSTOM_STORY_FIELDS[self._custom_story_index]
+        fields = self._custom_story_fields()
+        if not fields:
+            return
+
+        field = fields[self._custom_story_index]
 
         if key == pygame.K_UP:
-            self._custom_story_index = (self._custom_story_index - 1) % len(CUSTOM_STORY_FIELDS)
+            self._custom_story_index = (self._custom_story_index - 1) % len(fields)
             return
 
         if key == pygame.K_DOWN:
-            self._custom_story_index = (self._custom_story_index + 1) % len(CUSTOM_STORY_FIELDS)
+            self._custom_story_index = (self._custom_story_index + 1) % len(fields)
             return
 
         if key == pygame.K_BACKSPACE:
@@ -460,16 +462,42 @@ class GameApp:
             self._reset_custom_story_draft("已放弃未保存的自定义卷宗。")
             return
 
+        if key == pygame.K_DELETE:
+            try:
+                self._status_text = remove_custom_story_field(self._custom_story_draft, field.key)
+                remaining_fields = self._custom_story_fields()
+                self._custom_story_index = 0 if not remaining_fields else min(
+                    self._custom_story_index,
+                    len(remaining_fields) - 1,
+                )
+            except ValueError as exc:
+                self._status_text = str(exc)
+            return
+
         if key != pygame.K_RETURN:
             return
 
+        if field.kind == "action":
+            try:
+                self._status_text = apply_custom_story_action(self._custom_story_draft, field.key)
+                self._custom_story_index = min(
+                    self._custom_story_index,
+                    max(len(self._custom_story_fields()) - 1, 0),
+                )
+            except ValueError as exc:
+                self._status_text = str(exc)
+            return
+
+        if field.kind == "readonly":
+            return
+
         self._begin_input_edit(
-            field_name=field_name,
-            title=self._custom_story_field_label(field_name),
-            value=str(getattr(self._custom_story_draft, field_name)),
-            multiline=field_kind == "multiline",
-            max_length=1200 if field_kind == "multiline" else 120,
-            hint_text=self._custom_story_input_hint(field_name),
+            field_name=field.key,
+            title=field.label,
+            value=field.value,
+            multiline=field.kind == "multiline",
+            max_length=1600 if field.kind == "multiline" else 160,
+            hint_text=field.hint_text,
         )
 
     def _handle_input_keydown(self, key: int, text: str) -> None:
@@ -571,16 +599,25 @@ class GameApp:
             placeholder=placeholder,
             cursor=len(value),
         )
-        self._activate_text_input()
+        self._activate_text_input(multiline=multiline)
 
     def _cancel_input_edit(self) -> None:
         self._input_editor = None
         self._deactivate_text_input()
 
-    def _activate_text_input(self) -> None:
+    def _activate_text_input(self, *, multiline: bool) -> None:
         try:
             pygame.key.start_text_input()
-            pygame.key.set_text_input_rect(TEXT_INPUT_RECT)
+            pygame.key.set_text_input_rect(self._input_target_rect(multiline))
+        except pygame.error:
+            return
+
+    def _refresh_text_input_rect(self) -> None:
+        editor = self._input_editor
+        if editor is None:
+            return
+        try:
+            pygame.key.set_text_input_rect(self._input_target_rect(editor.multiline))
         except pygame.error:
             return
 
@@ -589,6 +626,18 @@ class GameApp:
             pygame.key.stop_text_input()
         except pygame.error:
             return
+
+    def _input_target_rect(self, multiline: bool) -> pygame.Rect:
+        modal_width = self._config.display.width - 472
+        modal_height = 248 if multiline else 196
+        modal_x = 236
+        modal_y = 208 if multiline else 220
+        return pygame.Rect(
+            modal_x + 22,
+            modal_y + 92,
+            modal_width - 44,
+            92 if multiline else 52,
+        )
 
     def _paste_clipboard_text(self) -> None:
         editor = self._input_editor
@@ -614,6 +663,42 @@ class GameApp:
     def _should_rely_on_textinput(self) -> bool:
         return hasattr(pygame, "TEXTINPUT")
 
+    def _begin_freeform_action_input(self) -> None:
+        if (
+            self._mode != "game"
+            or self._session is None
+            or self._session.loading
+            or self._session.current_scene.is_terminal
+        ):
+            return
+        self._begin_input_edit(
+            field_name="__freeform_action__",
+            title="自由行动",
+            value="",
+            multiline=True,
+            max_length=420,
+            hint_text=(
+                "写下不在当前选项里的行动。确认后会立即发送给 AI 裁定。"
+                "建议写清对象、动作和目标，例如：伪装成馆员去套话，或把钥匙藏进清洁车。"
+            ),
+            placeholder="输入你的自由行动",
+        )
+
+    def _submit_freeform_action(self, raw_value: str) -> None:
+        if self._session is None:
+            return
+        cleaned = raw_value.strip()
+        if not cleaned:
+            self._status_text = "自由行动不能为空。"
+            return
+        if self._session.loading or self._session.current_scene.is_terminal:
+            return
+        choice = self._session.build_freeform_choice(cleaned)
+        self._audio.play_effect(choice.sfx, choice.label, choice.action_id)
+        resolution = self._session.apply_choice(choice)
+        if resolution.requires_immediate_ai:
+            self._submit_settlement_request(request_type="freeform_action")
+
     def _handle_game_keydown(self, key: int) -> None:
         if key == pygame.K_m:
             self._return_to_main_menu("已返回主菜单")
@@ -624,6 +709,10 @@ class GameApp:
             return
 
         if self._mode != "game" or self._session is None:
+            return
+
+        if key == pygame.K_c:
+            self._begin_freeform_action_input()
             return
 
         if key == pygame.K_t and self._session.can_force_settle:
@@ -788,7 +877,11 @@ class GameApp:
     def _submit_settlement_request(
         self,
         *,
-        request_type: Literal["round_settlement", "forced_immediate_choice"] = "round_settlement",
+        request_type: Literal[
+            "round_settlement",
+            "forced_immediate_choice",
+            "freeform_action",
+        ] = "round_settlement",
     ) -> None:
         if (
             self._session is None
@@ -809,6 +902,11 @@ class GameApp:
             self._session.local_message = loading_hint
             latest_turn = round_actions_snapshot[-1].turn_index if round_actions_snapshot else None
             self._session.record_system_text("即时裁决", loading_hint, turn_index=latest_turn)
+        elif request_type == "freeform_action":
+            loading_hint = "自由行动已提交，AI 正在根据你的描述即时裁定。"
+            self._session.local_message = loading_hint
+            latest_turn = round_actions_snapshot[-1].turn_index if round_actions_snapshot else None
+            self._session.record_system_text("自由行动裁决", loading_hint, turn_index=latest_turn)
         self._session.begin_settlement()
         worker = threading.Thread(
             target=self._run_settlement_request,
@@ -847,7 +945,7 @@ class GameApp:
         settled_history_snapshot: list,
         round_actions_snapshot: list,
         scene_snapshot: SceneState,
-        request_type: Literal["round_settlement", "forced_immediate_choice"],
+        request_type: Literal["round_settlement", "forced_immediate_choice", "freeform_action"],
     ) -> None:
         try:
             scene = self._ai_client.settle_round(
@@ -871,6 +969,7 @@ class GameApp:
             )
 
     def _draw(self) -> None:
+        self._refresh_text_input_rect()
         runtime_background = self._runtime_background()
         runtime_avatar_gender = self._runtime_avatar_gender()
         runtime_operator_name = self._runtime_operator_name()
@@ -930,7 +1029,7 @@ class GameApp:
             self._audio.sync_menu("custom_story")
             self._menu_renderer.draw_custom_story_editor(
                 runtime_background,
-                list(CUSTOM_STORY_FIELDS),
+                self._custom_story_fields(),
                 self._custom_story_index,
                 self._custom_story_draft,
                 None if active_editor is None else active_editor.field_name,
@@ -1074,11 +1173,14 @@ class GameApp:
         self._cancel_input_edit()
 
         try:
+            if field_name == "__freeform_action__":
+                self._submit_freeform_action(raw_value)
+                return
             if self._is_custom_story_field(field_name):
-                value = self._validate_custom_story_field(field_name, raw_value)
-                setattr(self._custom_story_draft, field_name, value)
-                self._status_text = (
-                    f"{self._custom_story_field_label(field_name)}已更新，按 S 保存自定义卷宗。"
+                self._status_text = update_custom_story_field(
+                    self._custom_story_draft,
+                    field_name,
+                    raw_value,
                 )
                 return
             if field_name == "window_title":
@@ -1209,10 +1311,10 @@ class GameApp:
 
     def _reset_custom_story_draft(self, status_text: str | None = None) -> None:
         self._cancel_input_edit()
-        self._custom_story_draft = CustomStoryDraft(
-            subtitle=DEFAULT_CUSTOM_STORY_SUBTITLE,
-            detective_identity=DEFAULT_CUSTOM_DETECTIVE_IDENTITY,
-        )
+        self._custom_story_draft = CustomStoryDraft.blank()
+        self._custom_story_draft.subtitle = DEFAULT_CUSTOM_STORY_SUBTITLE
+        self._custom_story_draft.detective_identity = DEFAULT_CUSTOM_DETECTIVE_IDENTITY
+        self._custom_story_index = 0
         if status_text is not None:
             self._status_text = status_text
 
@@ -1249,39 +1351,15 @@ class GameApp:
         self._status_text = f"已保存自定义卷宗：{self._stories[story_index].title}"
 
     def _is_custom_story_field(self, field_name: str) -> bool:
-        return any(candidate_name == field_name for candidate_name, _, _ in CUSTOM_STORY_FIELDS)
+        return is_custom_story_editor_key(field_name)
 
-    def _validate_custom_story_field(self, field_name: str, raw_value: str) -> str:
-        if field_name in {"subtitle", "detective_identity"}:
-            cleaned = raw_value.strip()
-            if field_name == "subtitle":
-                return cleaned or DEFAULT_CUSTOM_STORY_SUBTITLE
-            return cleaned or DEFAULT_CUSTOM_DETECTIVE_IDENTITY
-
-        if field_name in {"setting", "core_case", "opening_hook"}:
-            return raw_value.strip()
-
-        return raw_value.replace("\r", " ").replace("\n", " ").strip()
-
-    def _custom_story_field_label(self, field_name: str) -> str:
-        for candidate_name, label, _ in CUSTOM_STORY_FIELDS:
-            if candidate_name == field_name:
-                return label
-        return field_name
-
-    def _custom_story_input_hint(self, field_name: str) -> str:
-        hints = {
-            "title": "输入卷宗主标题，保存后会自动生成一个新的剧本目录。",
-            "subtitle": "用于卷宗列表展示，可以写案件副标题或风格标签。",
-            "location": "输入案发地点或核心舞台，例如剧院后台、私人美术馆、海边别墅。",
-            "victim_name": "输入死者姓名，支持中文输入法。",
-            "victim_identity": "说明死者身份、职业或社会地位。",
-            "detective_identity": "说明追查者身份，默认会作为复盘侦探显示。",
-            "setting": "写清楚场景背景、当前局势与关键限制。支持多行输入。",
-            "core_case": "概括案件本身和玩家要逆向重演的核心矛盾。支持多行输入。",
-            "opening_hook": "写一个能直接把玩家拉进案发前最后时刻的开场描述。支持多行输入。",
-        }
-        return hints.get(field_name, "支持中文输入、方向键移动光标和 Ctrl+V 粘贴。")
+    def _custom_story_fields(self) -> list[CustomStoryEditorField]:
+        fields = build_custom_story_editor_fields(self._custom_story_draft)
+        if not fields:
+            self._custom_story_index = 0
+            return fields
+        self._custom_story_index = min(max(self._custom_story_index, 0), len(fields) - 1)
+        return fields
 
     def _custom_story_preview_story_id(self) -> str:
         if not self._custom_story_draft.title.strip():

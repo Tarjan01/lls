@@ -30,6 +30,8 @@ class PendingChoice:
     action_id: str
     resolution_mode: ActionResolutionMode = "local_rule"
     sfx: str | None = None
+    source: Literal["scene_option", "custom_action"] = "scene_option"
+    freeform_text: str | None = None
 
     def to_record(self) -> ActionRecord:
         return ActionRecord(
@@ -39,6 +41,8 @@ class PendingChoice:
             label=self.label,
             action_id=self.action_id,
             resolution_mode=self.resolution_mode,
+            source=self.source,
+            freeform_text=self.freeform_text,
         )
 
 
@@ -195,6 +199,20 @@ class GameSessionState:
             sfx=option.sfx,
         )
 
+    def build_freeform_choice(self, freeform_text: str) -> PendingChoice:
+        cleaned = freeform_text.strip()
+        return PendingChoice(
+            turn_index=self.total_action_count + 1,
+            interactable_id="custom_action",
+            interactable_name="自定义行动",
+            label=cleaned,
+            action_id="player_freeform_action",
+            resolution_mode="immediate_ai",
+            sfx="ui_confirm",
+            source="custom_action",
+            freeform_text=cleaned,
+        )
+
     def available_options_for(self, interactable: Interactable) -> tuple[ActionOption, ...]:
         return available_options(interactable)
 
@@ -231,6 +249,9 @@ class GameSessionState:
         self.error_message = None
 
     def apply_choice(self, choice: PendingChoice) -> ChoiceResolution:
+        if choice.source == "custom_action":
+            return self.apply_freeform_choice(choice)
+
         interactable = self._find_interactable(choice.interactable_id)
         if interactable is None:
             record = choice.to_record()
@@ -297,6 +318,31 @@ class GameSessionState:
             message=outcome.message,
             should_settle=requires_immediate_ai,
             requires_immediate_ai=requires_immediate_ai,
+        )
+
+    def apply_freeform_choice(self, choice: PendingChoice) -> ChoiceResolution:
+        record = choice.to_record()
+        self.round_actions.append(record)
+        self.local_message = "自由行动已提交，等待 AI 裁定。"
+        self.error_message = None
+        feedback = (
+            f"你提交了自由行动：{choice.freeform_text}"
+            if choice.freeform_text
+            else "你提交了一条自由行动。"
+        )
+        self._append_text_history(
+            f"行动 {record.turn_index} 路 自由行动",
+            feedback,
+            kind="system",
+            turn_index=record.turn_index,
+        )
+        self.active_interactable_id = None
+        self.selected_option_index = 0
+        return ChoiceResolution(
+            record=record,
+            message=feedback,
+            should_settle=True,
+            requires_immediate_ai=True,
         )
 
     def finish_initial_scene(self, scene: SceneState) -> None:

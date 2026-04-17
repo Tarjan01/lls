@@ -8,7 +8,12 @@ import pytest
 
 from reverse_detective.app import GameApp
 from reverse_detective.config import load_config
-from reverse_detective.custom_story import CustomStoryDraft, write_custom_story
+from reverse_detective.custom_story import (
+    CustomStoryDraft,
+    CustomStoryRoleDraft,
+    CustomStoryToolDraft,
+    write_custom_story,
+)
 from reverse_detective.story_loader import load_story_catalog
 
 
@@ -147,3 +152,47 @@ def test_game_app_can_save_custom_story_from_menu(
         assert any((tmp_path / story.id / "story.json").exists() for story in app._stories if story.title == "雾港最后一班船")
     finally:
         pygame.quit()
+
+
+def test_write_custom_story_preserves_custom_roles_and_tools(tmp_path: Path) -> None:
+    _write_background(tmp_path)
+
+    draft = CustomStoryDraft(
+        title="玻璃幕墙后的回声",
+        subtitle="玩家自定义卷宗",
+        location="会展中心贵宾层",
+        setting="闭馆后的贵宾层只剩保洁、安保和被临时留置的嘉宾。",
+        core_case="一名策展人死在临时封控的媒体室内，门禁记录却显示无人进入。",
+        opening_hook="所有展灯熄灭后，媒体室的备用电路却单独亮了一秒。",
+        victim_name="许洄",
+        victim_identity="策展人",
+        detective_identity="负责复盘此案的侦探",
+        roles=[
+            CustomStoryRoleDraft(
+                id="media_fixer",
+                title="公关顾问",
+                name="沈序",
+                background="你长期负责替展方处理公关危机，比任何人都更熟悉媒体室的流程和死角。",
+                motive="死者正准备公开一段会让你彻底失势的后台录音。",
+                special_conditions=["持有媒体室备用门卡。"],
+                signature_tools=[
+                    CustomStoryToolDraft(
+                        name="信号切换器",
+                        description="可以短时间切断采访间内部的回传线路。",
+                    )
+                ],
+                hidden_objective="在撤离前回收后台录音原件。",
+                strategy_kind="digital",
+            )
+        ],
+    )
+
+    story_path, _ = write_custom_story(
+        draft,
+        detective_name="江川",
+        stories_dir=tmp_path,
+    )
+    payload = json.loads(story_path.read_text(encoding="utf-8"))
+
+    assert payload["roles"][0]["id"] == "media_fixer"
+    assert payload["roles"][0]["signature_tools"][0]["name"] == "信号切换器"
