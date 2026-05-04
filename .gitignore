@@ -8,3 +8,4 @@ __pycache__/
 .tmp_audio/
 .tmp_kenney_*.html
 .tmp_*preview.png
+dist/

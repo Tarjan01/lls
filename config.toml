@@ -9,8 +9,12 @@ provider = "crs"
 base_url = "https://apikey.soxio.me/openai"
 model = "gpt-5.4"
 reasoning_effort = "xhigh"
-timeout_seconds = 120
+timeout_seconds = 120.0
 disable_response_storage = true
-use_mock_when_unconfigured = false
-fallback_to_mock_on_error = false
-credentials_path = "~/.reverse_detective/credentials.json"
+use_mock_when_unconfigured = true
+fallback_to_mock_on_error = true
+credentials_path = "C:\\Users\\74311\\.reverse_detective\\credentials.json"
+
+[player]
+detective_name = "蒋轩"
+avatar_gender = "female"
