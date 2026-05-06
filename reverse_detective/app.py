@@ -60,6 +60,7 @@ PLAYER_SIZE = (42, 62)
 PLAYER_SPEED = 240.0
 MAIN_MENU_OPTIONS = ("开始游戏", "自定义剧本", "选项设置", "退出游戏")
 PLAYER_AVATAR_OPTIONS = ("male", "female")
+PROFILE_SETUP_NAME_FIELD = "profile_detective_name"
 SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("window_title", "窗口标题", "text"),
     ("detective_name", "侦探名字", "text"),
@@ -75,9 +76,9 @@ SETTINGS_FIELDS: tuple[tuple[str, str, str], ...] = (
     ("fallback_to_mock_on_error", "请求失败时回退 Mock", "bool"),
 )
 
-MenuMode = Literal["main_menu", "story_browser", "settings", "custom_story", "game"]
+MenuMode = Literal["main_menu", "profile_setup", "story_browser", "settings", "custom_story", "game"]
 BrowserFocus = Literal["story", "role"]
-GamePanelFocus = Literal["options", "sidebar", "freeform"]
+GamePanelFocus = Literal["options", "sidebar"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -163,6 +164,33 @@ class SettingsDraft:
         )
 
 
+@dataclass(slots=True)
+class ProfileDraft:
+    detective_name: str
+    avatar_gender: str
+
+    @classmethod
+    def from_config(cls, config: AppConfig) -> "ProfileDraft":
+        avatar_gender = config.player.avatar_gender.strip().lower()
+        if avatar_gender not in PLAYER_AVATAR_OPTIONS:
+            avatar_gender = PLAYER_AVATAR_OPTIONS[0]
+        detective_name = config.player.detective_name.strip() or config.player.detective_name
+        return cls(
+            detective_name=detective_name,
+            avatar_gender=avatar_gender,
+        )
+
+    def to_player_config(self, current_config: AppConfig) -> PlayerConfig:
+        avatar_gender = self.avatar_gender.strip().lower()
+        if avatar_gender not in PLAYER_AVATAR_OPTIONS:
+            avatar_gender = current_config.player.avatar_gender
+        detective_name = self.detective_name.strip() or current_config.player.detective_name
+        return PlayerConfig(
+            detective_name=detective_name,
+            avatar_gender=avatar_gender,
+        )
+
+
 class GameApp:
     """Main game application with menu flow, settings and background scene generation."""
 
@@ -178,6 +206,7 @@ class GameApp:
         self._story_focus: BrowserFocus = "story"
         self._detail_modal: DetailModal | None = None
         self._mode: MenuMode = "main_menu"
+        self._profile_draft = ProfileDraft.from_config(config)
         self._premise: StoryPremise | None = None
         self._session: GameSessionState | None = None
         self._result_queue: Queue[WorkerResult] = Queue()
@@ -269,6 +298,10 @@ class GameApp:
             self._handle_main_menu_keydown(key)
             return
 
+        if self._mode == "profile_setup":
+            self._handle_profile_setup_keydown(key)
+            return
+
         if key == pygame.K_ESCAPE:
             self._return_to_main_menu("已返回主菜单")
             return
@@ -288,26 +321,76 @@ class GameApp:
         self._handle_game_keydown(key)
 
     def _handle_mousebuttondown(self, button: int, position: tuple[int, int]) -> None:
-        if self._input_editor is not None or self._detail_modal is not None:
+        if self._detail_modal is not None:
             return
 
         if button == 1:
+            if self._mode == "main_menu":
+                action = self._menu_renderer.consume_main_menu_action(position)
+                if action == "start_game":
+                    self._enter_profile_setup()
+                    return
+                if action == "custom_story":
+                    self._enter_custom_story()
+                    return
+                if action == "settings":
+                    self._enter_settings()
+                    return
+                if action == "exit_game":
+                    self._running = False
+                    return
+            elif self._mode == "profile_setup":
+                action = self._menu_renderer.consume_profile_setup_action(position)
+                if action == "gender_male":
+                    self._set_profile_gender("male")
+                    return
+                if action == "gender_female":
+                    self._set_profile_gender("female")
+                    return
+                if action == "edit_id":
+                    self._begin_input_edit(
+                        field_name=PROFILE_SETUP_NAME_FIELD,
+                        title="请输入ID",
+                        value=self._profile_draft.detective_name,
+                        hint_text="输入玩家ID后点击开始游戏继续。",
+                    )
+                    return
+                if action == "start_game":
+                    if self._input_editor is not None:
+                        if not self._commit_input_edit():
+                            return
+                        self._start_profiled_story()
+                    else:
+                        self._start_profiled_story()
+                    return
+                if action == "back":
+                    self._return_to_main_menu()
+                    return
+                if self._input_editor is not None:
+                    self._handle_input_click(position)
+                    return
             if self._mode == "game":
                 action = self._game_renderer.consume_action_click(position)
-                if action == "open_freeform_action":
-                    self._game_panel_focus = "freeform"
-                    self._begin_freeform_action_input()
-                    return
-                if action is not None and action.startswith("select_sidebar:"):
+                if action is not None and action.startswith("choose_option:"):
                     try:
-                        sidebar_index = int(action.split(":", 1)[1])
+                        option_index = int(action.split(":", 1)[1])
                     except ValueError:
-                        sidebar_index = -1
-                    if self._game_renderer.select_hud_sidebar_section(sidebar_index):
-                        self._game_panel_focus = "sidebar"
+                        option_index = -1
+                    choice = self._session.choose_option_by_index(option_index) if self._session is not None else None
+                    if choice is not None and self._session is not None:
+                        self._game_panel_focus = "options"
+                        self._audio.play_effect(choice.sfx, choice.label, choice.action_id)
+                        resolution = self._session.apply_choice(choice)
+                        if resolution.requires_immediate_ai:
+                            self._submit_settlement_request(request_type="forced_immediate_choice")
+                        elif resolution.should_settle:
+                            self._submit_settlement_request()
                         return
             renderer = self._active_text_renderer()
             if renderer is not None and renderer.handle_text_selection_click(position):
+                return
+            if self._input_editor is not None:
+                self._handle_input_click(position)
                 return
 
         if button == 4:
@@ -354,13 +437,36 @@ class GameApp:
 
         self._audio.play_confirm(MAIN_MENU_OPTIONS[self._main_menu_index])
         if self._main_menu_index == 0:
-            self._enter_story_browser()
+            self._enter_profile_setup()
         elif self._main_menu_index == 1:
             self._enter_custom_story()
         elif self._main_menu_index == 2:
             self._enter_settings()
         else:
             self._running = False
+
+    def _handle_profile_setup_keydown(self, key: int) -> None:
+        if key == pygame.K_BACKSPACE:
+            self._return_to_main_menu()
+            return
+
+        if key == pygame.K_ESCAPE:
+            self._return_to_main_menu()
+            return
+
+        if key == pygame.K_LEFT:
+            self._set_profile_gender("male")
+            return
+
+        if key == pygame.K_RIGHT:
+            self._set_profile_gender("female")
+            return
+
+        if key in (pygame.K_RETURN, pygame.K_SPACE):
+            if self._input_editor is not None:
+                self._commit_input_edit()
+                return
+            self._start_profiled_story()
 
     def _handle_story_browser_keydown(self, key: int) -> None:
         if key == pygame.K_LEFT:
@@ -563,7 +669,9 @@ class GameApp:
             return
 
         if key == pygame.K_RETURN:
-            self._commit_input_edit()
+            committed = self._commit_input_edit()
+            if committed and editor.field_name == PROFILE_SETUP_NAME_FIELD:
+                self._start_profiled_story()
             return
 
         if key == pygame.K_BACKSPACE:
@@ -613,6 +721,29 @@ class GameApp:
         )
         self._activate_text_input(multiline=multiline)
 
+    def _handle_input_click(self, position: tuple[int, int]) -> None:
+        editor = self._input_editor
+        if editor is None:
+            return
+        if editor.field_name != PROFILE_SETUP_NAME_FIELD:
+            return
+        input_rect = self._menu_renderer._profile_setup_input_rect()
+        if input_rect.collidepoint(position):
+            self._refresh_text_input_rect()
+            return
+        start_rect = self._menu_renderer._profile_setup_start_rect()
+        if start_rect.collidepoint(position):
+            if self._commit_input_edit():
+                self._start_profiled_story()
+            return
+        male_rect, female_rect = self._menu_renderer._profile_setup_gender_rects()
+        if male_rect.collidepoint(position):
+            self._set_profile_gender("male")
+            return
+        if female_rect.collidepoint(position):
+            self._set_profile_gender("female")
+            return
+
     def _cancel_input_edit(self) -> None:
         self._input_editor = None
         self._deactivate_text_input()
@@ -640,6 +771,15 @@ class GameApp:
             return
 
     def _input_target_rect(self, multiline: bool) -> pygame.Rect:
+        editor = self._input_editor
+        if editor is not None and editor.field_name == PROFILE_SETUP_NAME_FIELD:
+            input_rect = self._menu_renderer._profile_setup_input_rect()
+            return pygame.Rect(
+                input_rect.x + 18,
+                input_rect.y + 30,
+                input_rect.width - 36,
+                56,
+            )
         modal_width = self._config.display.width - 472
         modal_height = 248 if multiline else 196
         modal_x = 236
@@ -675,43 +815,6 @@ class GameApp:
     def _should_rely_on_textinput(self) -> bool:
         return hasattr(pygame, "TEXTINPUT")
 
-    def _begin_freeform_action_input(self) -> None:
-        if (
-            self._mode != "game"
-            or self._session is None
-            or self._session.loading
-            or self._session.current_scene.is_terminal
-        ):
-            return
-        self._clear_selected_text_readers()
-        self._begin_input_edit(
-            field_name="__freeform_action__",
-            title="自由行动",
-            value="",
-            multiline=True,
-            max_length=420,
-            hint_text=(
-                "写下不在当前选项里的行动。确认后会立即发送给 AI 裁定。"
-                "建议写清对象、动作和目标，例如：伪装成馆员去套话，或把钥匙藏进清洁车。"
-            ),
-            placeholder="输入你的自由行动",
-        )
-
-    def _submit_freeform_action(self, raw_value: str) -> None:
-        if self._session is None:
-            return
-        cleaned = raw_value.strip()
-        if not cleaned:
-            self._status_text = "自由行动不能为空。"
-            return
-        if self._session.loading or self._session.current_scene.is_terminal:
-            return
-        choice = self._session.build_freeform_choice(cleaned)
-        self._audio.play_effect(choice.sfx, choice.label, choice.action_id)
-        resolution = self._session.apply_choice(choice)
-        if resolution.requires_immediate_ai:
-            self._submit_settlement_request(request_type="freeform_action")
-
     def _available_game_panels(self) -> tuple[GamePanelFocus, ...]:
         if self._mode != "game" or self._session is None:
             return ()
@@ -727,8 +830,6 @@ class GameApp:
         ):
             panels.append("options")
         panels.append("sidebar")
-        if not self._session.loading and not self._session.current_scene.is_terminal:
-            panels.append("freeform")
         return tuple(panels)
 
     def _ensure_valid_game_panel_focus(self) -> None:
@@ -777,11 +878,6 @@ class GameApp:
             self._cycle_game_panel_focus(direction)
             return
 
-        if key == pygame.K_c:
-            self._game_panel_focus = "freeform"
-            self._begin_freeform_action_input()
-            return
-
         if key == pygame.K_t and self._session.can_force_settle:
             self._submit_settlement_request()
             return
@@ -807,11 +903,6 @@ class GameApp:
             if key in (pygame.K_RETURN, pygame.K_SPACE):
                 self._game_renderer.ensure_hud_sidebar_selection()
                 return
-
-        if self._game_panel_focus == "freeform":
-            if key in (pygame.K_RETURN, pygame.K_SPACE):
-                self._begin_freeform_action_input()
-            return
 
         if key == pygame.K_UP:
             self._session.cycle_options(-1)
@@ -966,7 +1057,6 @@ class GameApp:
         request_type: Literal[
             "round_settlement",
             "forced_immediate_choice",
-            "freeform_action",
         ] = "round_settlement",
     ) -> None:
         if (
@@ -988,11 +1078,6 @@ class GameApp:
             self._session.local_message = loading_hint
             latest_turn = round_actions_snapshot[-1].turn_index if round_actions_snapshot else None
             self._session.record_system_text("即时裁决", loading_hint, turn_index=latest_turn)
-        elif request_type == "freeform_action":
-            loading_hint = "自由行动已提交，AI 正在根据你的描述即时裁定。"
-            self._session.local_message = loading_hint
-            latest_turn = round_actions_snapshot[-1].turn_index if round_actions_snapshot else None
-            self._session.record_system_text("自由行动裁决", loading_hint, turn_index=latest_turn)
         self._session.begin_settlement()
         worker = threading.Thread(
             target=self._run_settlement_request,
@@ -1031,7 +1116,7 @@ class GameApp:
         settled_history_snapshot: list,
         round_actions_snapshot: list,
         scene_snapshot: SceneState,
-        request_type: Literal["round_settlement", "forced_immediate_choice", "freeform_action"],
+        request_type: Literal["round_settlement", "forced_immediate_choice"],
     ) -> None:
         try:
             scene = self._ai_client.settle_round(
@@ -1064,12 +1149,25 @@ class GameApp:
             self._schedule_initial_scene_prefetch()
             self._audio.sync_menu("main_menu")
             self._menu_renderer.draw_main_menu(
-                runtime_background,
-                list(MAIN_MENU_OPTIONS),
                 self._main_menu_index,
                 self._status_text,
                 operator_portrait_name=runtime_operator_name,
                 operator_portrait_gender=runtime_avatar_gender,
+            )
+            return
+
+        if self._mode == "profile_setup":
+            self._audio.sync_menu("main_menu")
+            active_editor = self._input_editor
+            self._menu_renderer.draw_profile_setup(
+                self._profile_draft,
+                None if active_editor is None else active_editor.field_name,
+                "" if active_editor is None else active_editor.value,
+                self._status_text,
+                input_hint="" if active_editor is None else active_editor.hint_text,
+                input_composition="" if active_editor is None else active_editor.composition,
+                input_cursor=0 if active_editor is None else active_editor.cursor,
+                input_secret=False if active_editor is None else active_editor.secret,
             )
             return
 
@@ -1161,6 +1259,20 @@ class GameApp:
         self._detail_modal = None
         self._clear_selected_text_readers()
 
+    def _enter_profile_setup(self) -> None:
+        self._mode = "profile_setup"
+        self._detail_modal = None
+        self._clear_selected_text_readers()
+        self._cancel_input_edit()
+        self._profile_draft = ProfileDraft.from_config(self._config)
+        self._profile_draft.detective_name = ""
+        self._begin_input_edit(
+            field_name=PROFILE_SETUP_NAME_FIELD,
+            title="请输入ID",
+            value=self._profile_draft.detective_name,
+            hint_text="输入玩家ID后点击开始游戏继续。",
+        )
+
     def _enter_settings(self) -> None:
         self._mode = "settings"
         self._settings_index = 0
@@ -1195,6 +1307,29 @@ class GameApp:
 
         self._submit_initial_request()
 
+    def _start_profiled_story(self) -> None:
+        self._cancel_input_edit()
+        self._config = replace(
+            self._config,
+            player=self._profile_draft.to_player_config(self._config),
+        )
+        pygame.display.set_caption(self._config.display.title)
+        self._settings_draft = SettingsDraft.from_config(
+            self._config,
+            load_api_key(self._config.ai.credentials_path, self._config.ai.provider),
+        )
+        self._audio.play_confirm("start_story")
+        self._enter_story_browser()
+
+    def _set_profile_gender(self, gender: str) -> None:
+        if gender not in PLAYER_AVATAR_OPTIONS:
+            return
+        self._profile_draft.avatar_gender = gender
+        self._config = replace(
+            self._config,
+            player=replace(self._config.player, avatar_gender=gender),
+        )
+
     def _return_to_main_menu(self, status_text: str | None = None) -> None:
         self._request_serial += 1
         self._mode = "main_menu"
@@ -1203,6 +1338,7 @@ class GameApp:
         self._detail_modal = None
         self._cancel_input_edit()
         self._clear_selected_text_readers()
+        self._main_menu_index = 0
         if status_text is not None:
             self._status_text = status_text
 
@@ -1259,26 +1395,30 @@ class GameApp:
             footer="Enter / Space / Esc 关闭详情",
         )
 
-    def _commit_input_edit(self) -> None:
+    def _commit_input_edit(self) -> bool:
         editor = self._input_editor
         if editor is None:
-            return
+            return True
 
         field_name = editor.field_name
         raw_value = editor.value
         self._cancel_input_edit()
 
         try:
-            if field_name == "__freeform_action__":
-                self._submit_freeform_action(raw_value)
-                return
+            if field_name == PROFILE_SETUP_NAME_FIELD:
+                value = raw_value.strip()
+                if not value:
+                    raise ValueError("玩家ID不能为空。")
+                self._profile_draft.detective_name = value
+                self._status_text = "玩家ID已更新，按 Enter 或点击开始游戏继续。"
+                return True
             if self._is_custom_story_field(field_name):
                 self._status_text = update_custom_story_field(
                     self._custom_story_draft,
                     field_name,
                     raw_value,
                 )
-                return
+                return True
             if field_name == "window_title":
                 value = raw_value.strip()
                 if not value:
@@ -1312,10 +1452,11 @@ class GameApp:
                 raise ValueError(f"不支持编辑字段 {field_name!r}。")
         except ValueError as exc:
             self._status_text = str(exc)
-            return
+            return False
 
         setattr(self._settings_draft, field_name, value)
         self._status_text = f"{self._field_label(field_name)} 已更新，按 S 保存。"
+        return True
 
     def _toggle_setting(self, field_name: str) -> None:
         current = bool(getattr(self._settings_draft, field_name))

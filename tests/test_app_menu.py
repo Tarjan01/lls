@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from dataclasses import replace
 
@@ -25,7 +25,9 @@ def test_game_app_starts_on_menu(monkeypatch: pytest.MonkeyPatch) -> None:
         pygame.quit()
 
 
-def test_main_menu_can_enter_story_browser_and_start_game(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_menu_enters_profile_setup_then_story_browser_and_start_game(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
     monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
 
@@ -38,6 +40,12 @@ def test_main_menu_can_enter_story_browser_and_start_game(monkeypatch: pytest.Mo
     app._submit_initial_request = fake_submit_initial_request  # type: ignore[method-assign]
     app._ai_client.load_cached_initial_scene = lambda premise: None  # type: ignore[method-assign]
     try:
+        app._handle_keydown(pygame.K_RETURN)
+
+        assert app._mode == "profile_setup"
+        assert app._input_editor is not None
+
+        app._handle_textinput("娴嬭瘯ID")
         app._handle_keydown(pygame.K_RETURN)
 
         assert app._mode == "story_browser"
@@ -63,11 +71,11 @@ def test_start_selected_story_uses_cached_initial_scene(monkeypatch: pytest.Monk
             "scene": {
                 "background_image": "bg.png",
                 "bgm": "bgm.mp3",
-                "description": "缓存初始场景",
+                "description": "缂撳瓨鍒濆鍦烘櫙",
             },
             "npcs": [],
             "interactables": [],
-            "narrative": "这是本地缓存的开场。",
+            "narrative": "This is the cached opening scene.",
             "game_status": "ongoing",
             "ending_text": None,
         }
@@ -81,16 +89,42 @@ def test_start_selected_story_uses_cached_initial_scene(monkeypatch: pytest.Monk
 
     try:
         app._handle_keydown(pygame.K_RETURN)
+        app._handle_textinput("娴嬭瘯ID")
+        app._handle_keydown(pygame.K_RETURN)
         app._handle_keydown(pygame.K_SPACE)
 
         assert app._mode == "game"
         assert app._premise is not None
         assert app._session is not None
         assert app._session.loading is False
-        assert app._session.current_scene.scene.description == "缓存初始场景"
+        assert app._session.current_scene.scene.description == "缂撳瓨鍒濆鍦烘櫙"
         assert submitted["called"] is False
         assert app._session.selected_text_history is not None
         assert "本地预生成" in app._session.selected_text_history.title
+    finally:
+        pygame.quit()
+
+
+def test_profile_setup_can_update_player_id_and_gender(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+
+    app = GameApp(load_config())
+    try:
+        app._enter_profile_setup()
+        assert app._mode == "profile_setup"
+        assert app._input_editor is not None
+        assert app._input_editor.value == ""
+        app._handle_textinput("娴嬭瘯ID")
+
+        app._set_profile_gender("female")
+        assert app._profile_draft.avatar_gender == "female"
+
+        app._handle_keydown(pygame.K_RETURN)
+
+        assert app._mode == "story_browser"
+        assert app._config.player.detective_name == "娴嬭瘯ID"
+        assert app._config.player.avatar_gender == "female"
     finally:
         pygame.quit()
 
@@ -113,7 +147,7 @@ def test_settings_save_updates_runtime_config(monkeypatch: pytest.MonkeyPatch) -
     app = GameApp(load_config())
     try:
         app._settings_draft.window_title = "Reverse Detective Test"
-        app._settings_draft.detective_name = "林岚"
+        app._settings_draft.detective_name = "鏋楀矚"
         app._settings_draft.avatar_gender = "female"
         app._settings_draft.fps = 75
         app._settings_draft.base_url = "https://example.com/v1"
@@ -126,7 +160,7 @@ def test_settings_save_updates_runtime_config(monkeypatch: pytest.MonkeyPatch) -
         app._save_settings()
 
         assert app._config.display.title == "Reverse Detective Test"
-        assert app._config.player.detective_name == "林岚"
+        assert app._config.player.detective_name == "鏋楀矚"
         assert app._config.player.avatar_gender == "female"
         assert app._config.display.fps == 75
         assert app._config.ai.base_url == "https://example.com/v1"
@@ -151,17 +185,17 @@ def test_current_story_uses_runtime_player_name(monkeypatch: pytest.MonkeyPatch)
     try:
         app._config = replace(
             app._config,
-            player=PlayerConfig(detective_name="林岚", avatar_gender="female"),
+            player=PlayerConfig(detective_name="鏋楀矚", avatar_gender="female"),
         )
 
         story = app.current_story
         background = app._runtime_background()
 
-        assert story.detective_name == "林岚"
-        assert story.simulation_operator_name == "林岚"
-        assert "林岚" in story.opening_hook
-        assert background.operator_name == "林岚"
-        assert "林岚" in background.menu_intro
+        assert story.detective_name == "鏋楀矚"
+        assert story.simulation_operator_name == "鏋楀矚"
+        assert "鏋楀矚" in story.opening_hook
+        assert background.operator_name == "鏋楀矚"
+        assert "鏋楀矚" in background.menu_intro
     finally:
         pygame.quit()
 
@@ -174,18 +208,18 @@ def test_textinput_updates_editor_for_chinese_input(monkeypatch: pytest.MonkeyPa
     try:
         app._begin_input_edit(
             field_name="detective_name",
-            title="侦探名字",
+            title="渚︽帰鍚嶅瓧",
             value="",
-            hint_text="支持中文输入。",
+            hint_text="Supports Chinese input.",
         )
 
-        app._handle_textediting("林")
+        app._handle_textediting("glyph")
         assert app._input_editor is not None
-        assert app._input_editor.composition == "林"
+        assert app._input_editor.composition == "glyph"
 
-        app._handle_textinput("林岚")
+        app._handle_textinput("鏋楀矚")
 
-        assert app._input_editor.value == "林岚"
+        assert app._input_editor.value == "鏋楀矚"
         assert app._input_editor.composition == ""
     finally:
         pygame.quit()
@@ -208,12 +242,12 @@ def test_begin_input_edit_sets_dynamic_text_input_rect(monkeypatch: pytest.Monke
     try:
         app._begin_input_edit(
             field_name="detective_name",
-            title="侦探名字",
+            title="渚︽帰鍚嶅瓧",
             value="",
         )
         app._begin_input_edit(
-            field_name="__freeform_action__",
-            title="自由行动",
+            field_name="custom_story_briefing",
+            title="Custom briefing",
             value="",
             multiline=True,
         )

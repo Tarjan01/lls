@@ -65,7 +65,7 @@ def test_menu_renderer_registers_click_selectable_text_for_truncated_option(
 
     renderer = MenuRenderer(screen, 1280, 720)
     try:
-        renderer.draw_main_menu(background, [long_option, "退出游戏"], 0, "状态提示文本也非常长，需要截断")
+        renderer.draw_main_menu(0, "状态提示文本也非常长，需要截断", options=[long_option, "退出游戏"])
 
         assert any(target.text == long_option for target in renderer._tooltip_targets)
         assert len(renderer._tooltip_targets) >= 2
