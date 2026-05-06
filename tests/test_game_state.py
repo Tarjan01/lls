@@ -9,7 +9,7 @@ def _build_local_logic_scene():
     return load_scene_payload(
         {
             "scene": {
-                "background_image": "mansion_study_room.png",
+                "background_image": "总.jpg",
                 "bgm": "tense_loop.mp3",
                 "description": "关键决策测试场景",
             },
@@ -90,7 +90,7 @@ def _build_local_logic_scene():
                             "label": "执行关键动作",
                             "action_id": "critical_move",
                             "resolution_mode": "immediate_ai",
-                            "local_logic": None
+                            "local_logic": None,
                         }
                     ],
                 },

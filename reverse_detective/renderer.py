@@ -11,7 +11,11 @@ import pygame
 
 from reverse_detective.game_state import GameSessionState
 from reverse_detective.models import ActionOption, Interactable, NPC, SceneState
-from reverse_detective.utils.assets import DEFAULT_ASSET_CACHE_ROOT, resolve_cached_asset_path
+from reverse_detective.utils.assets import (
+    DEFAULT_ASSET_CACHE_ROOT,
+    resolve_cached_asset_path,
+    resolve_scene_background_path,
+)
 from reverse_detective.utils.text import fit_text, preview_wrapped_text, wrap_text
 
 
@@ -495,8 +499,7 @@ class Renderer(TooltipMixin):
         self._action_targets.append(UiActionTarget(rect=rect.copy(), action=action))
 
     def _draw_background(self, scene: SceneState) -> None:
-        background_surface = self._load_asset_surface(
-            "background",
+        background_surface = self._load_scene_background_surface(
             scene.scene.background_image,
             (self._width, self._play_area_height),
             scene.scene.description,
@@ -505,22 +508,46 @@ class Renderer(TooltipMixin):
         if background_surface is not None:
             self._surface.blit(background_surface, (0, 0))
             vignette = pygame.Surface((self._width, self._play_area_height), pygame.SRCALPHA)
-            vignette.fill((8, 12, 18, 26))
+            vignette.fill((8, 12, 18, 18))
             self._surface.blit(vignette, (0, 0))
             return
 
-        top_color, mid_color, floor_color = self._resolver.resolve_background(
-            scene.scene.background_image
-        )
-        for y in range(self._play_area_height):
-            ratio = y / max(self._play_area_height - 1, 1)
-            color = _lerp_color(top_color, mid_color, ratio)
-            pygame.draw.line(self._surface, color, (0, y), (self._width, y))
+        fallback_surface = pygame.Surface((self._width, self._play_area_height))
+        fallback_surface.fill((15, 17, 22))
+        self._surface.blit(fallback_surface, (0, 0))
 
-        floor_rect = pygame.Rect(0, self._play_area_height - 100, self._width, 100)
-        pygame.draw.rect(self._surface, floor_color, floor_rect)
-        pygame.draw.rect(self._surface, (220, 230, 245), pygame.Rect(70, 52, 1140, 180), border_radius=18)
-        pygame.draw.rect(self._surface, (35, 45, 62), pygame.Rect(88, 70, 1104, 144), border_radius=14)
+    def _load_scene_background_surface(
+        self,
+        asset_ref: str,
+        size: tuple[int, int],
+        *hint_texts: str,
+    ) -> pygame.Surface | None:
+        if self._asset_root == DEFAULT_ASSET_CACHE_ROOT:
+            asset_path = resolve_scene_background_path(asset_ref, *hint_texts)
+        else:
+            asset_path = resolve_cached_asset_path("background", asset_ref, self._asset_root, *hint_texts)
+        if asset_path is None or not asset_path.is_file():
+            return None
+
+        cache_key = (str(asset_path), size)
+        cached = self._image_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        try:
+            loaded = pygame.image.load(str(asset_path))
+            if loaded.get_alpha() is not None:
+                loaded = loaded.convert_alpha()
+            else:
+                loaded = loaded.convert()
+            if loaded.get_size() != size:
+                loaded = pygame.transform.smoothscale(loaded, size)
+        except Exception:
+            return None
+
+        self._image_cache[cache_key] = loaded
+        return loaded
+
     def _draw_world(
         self,
         scene: SceneState,

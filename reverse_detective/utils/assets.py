@@ -13,6 +13,21 @@ from typing import Any
 DEFAULT_ASSET_LIBRARY_ROOT = Path("assets/img").resolve()
 # Backward-compatible alias for older imports.
 DEFAULT_ASSET_CACHE_ROOT = DEFAULT_ASSET_LIBRARY_ROOT
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+GAME_SCENE_BACKGROUND_ROOT = PROJECT_ROOT / "assets" / "h_ass"
+SCENE_BACKGROUND_DEFAULT = "总.jpg"
+SCENE_BACKGROUND_FILENAMES = (
+    "总.jpg",
+    "前厅.png",
+    "书房.jpg",
+    "茶水间.png",
+    "医务室.png",
+    "杂物间.png",
+    "主卧.png",
+    "少爷卧室.png",
+    "苏曼客房.png",
+    "阁楼.png",
+)
 
 _VALID_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 _KIND_DIRECTORIES = {
@@ -27,6 +42,85 @@ _CATALOG_FILENAME = "catalog.json"
 _CATALOG_CACHE: dict[Path, dict[str, list[dict[str, Any]]]] = {}
 _KIND_LIBRARY_CACHE: dict[tuple[Path, str], list[dict[str, Any]]] = {}
 _MIN_CATALOG_MATCH_SCORE = 20.0
+_SCENE_BACKGROUND_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "书房.jpg",
+        (
+            "书房",
+            "study",
+            "study room",
+            "mansion study room",
+            "mansion_study_room",
+        ),
+    ),
+    (
+        "前厅.png",
+        (
+            "前厅",
+            "front hall",
+            "hall",
+            "foyer",
+            "gallery",
+            "front gallery",
+            "front_gallery",
+            "mansion foyer night",
+            "mansion_foyer_night",
+            "lounge",
+        ),
+    ),
+    (
+        "茶水间.png",
+        ("茶水间", "tea room", "tea", "pantry"),
+    ),
+    (
+        "医务室.png",
+        ("医务室", "medical", "infirmary", "clinic"),
+    ),
+    (
+        "杂物间.png",
+        ("杂物间", "storage", "utility", "closet", "service"),
+    ),
+    (
+        "少爷卧室.png",
+        ("少爷卧室", "少爷", "young master", "young master bedroom", "young_master"),
+    ),
+    (
+        "苏曼客房.png",
+        ("苏曼客房", "苏曼", "客房", "guest room", "guest", "guest_room"),
+    ),
+    (
+        "主卧.png",
+        ("主卧", "master bedroom", "master", "bedroom"),
+    ),
+    (
+        "阁楼.png",
+        (
+            "阁楼",
+            "attic",
+            "loft",
+            "cybernoir loft lounge",
+            "cybernoir_loft_lounge",
+            "loft lounge",
+        ),
+    ),
+    (
+        "总.jpg",
+        (
+            "总",
+            "main",
+            "main scene",
+            "main scene map",
+            "overview",
+            "map",
+            "house map",
+            "mansion map",
+            "rainy villa hall",
+            "rainy_villa_hall",
+            "default",
+            "whole house",
+        ),
+    ),
+)
 
 
 def resolve_asset_path(
@@ -80,6 +174,37 @@ def resolve_cached_asset_path(
     """Backward-compatible wrapper around :func:`resolve_asset_path`."""
 
     return resolve_asset_path(asset_kind, asset_ref, asset_root, *hint_texts)
+
+
+def resolve_scene_background_path(asset_ref: str, *hint_texts: str) -> Path | None:
+    """Resolve a gameplay scene background from the bundled `assets/h_ass` set."""
+
+    resolved_ref = normalize_scene_background_ref(asset_ref, *hint_texts)
+    candidate = (GAME_SCENE_BACKGROUND_ROOT / resolved_ref).resolve()
+    if candidate.is_file():
+        return candidate
+    fallback = (GAME_SCENE_BACKGROUND_ROOT / SCENE_BACKGROUND_DEFAULT).resolve()
+    if fallback.is_file():
+        return fallback
+    return None
+
+
+def normalize_scene_background_ref(asset_ref: str, *hint_texts: str) -> str:
+    """Map arbitrary background hints onto the curated mansion background set."""
+
+    query = _normalize_scene_background_query(" ".join(fragment for fragment in (asset_ref, *hint_texts) if fragment))
+    if not query:
+        return SCENE_BACKGROUND_DEFAULT
+
+    for canonical, aliases in _SCENE_BACKGROUND_RULES:
+        canonical_query = _normalize_scene_background_query(canonical)
+        if canonical_query and canonical_query in query:
+            return canonical
+        for alias in aliases:
+            if _normalize_scene_background_query(alias) in query:
+                return canonical
+
+    return SCENE_BACKGROUND_DEFAULT
 
 
 def ensure_asset_parent(path: Path) -> Path:
@@ -301,6 +426,11 @@ def _sanitize_asset_filename(asset_ref: str) -> str:
 
 def _normalize_text(value: str) -> str:
     return " ".join(sorted(_tokenize(value)))
+
+
+def _normalize_scene_background_query(value: str) -> str:
+    lowered = re.sub(r"\.(png|jpg|jpeg|webp)$", "", value.strip(), flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", lowered.lower().replace("_", " ").replace("-", " ")).strip()
 
 
 def _tokenize(value: str) -> set[str]:

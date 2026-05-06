@@ -32,24 +32,24 @@ def test_resolve_asset_path_matches_catalog_alias(tmp_path: Path) -> None:
 def test_resolve_asset_path_uses_background_library_with_chinese_hints(tmp_path: Path) -> None:
     background_dir = tmp_path / "backgrounds"
     background_dir.mkdir(parents=True)
-    study_path = background_dir / "mansion_study_room.png"
-    hall_path = background_dir / "rainy_villa_hall.png"
-    study_path.write_bytes(b"png")
-    hall_path.write_bytes(b"png")
+    overview_path = background_dir / "总.jpg"
+    front_path = background_dir / "前厅.png"
+    overview_path.write_bytes(b"png")
+    front_path.write_bytes(b"png")
     (background_dir / "library.json").write_text(
         json.dumps(
             [
                 {
-                    "id": "rainy_villa_hall",
-                    "path": "backgrounds/rainy_villa_hall.png",
+                    "id": "总",
+                    "path": "backgrounds/总.jpg",
                     "aliases": ["default", "大厅"],
                     "tags": ["default", "室内", "大厅"],
                 },
                 {
-                    "id": "mansion_study_room",
-                    "path": "backgrounds/mansion_study_room.png",
-                    "aliases": ["书房", "案发书房"],
-                    "tags": ["室内", "书房", "密室"],
+                    "id": "前厅",
+                    "path": "backgrounds/前厅.png",
+                    "aliases": ["front hall", "案发前厅"],
+                    "tags": ["室内", "前厅", "门厅"],
                 },
             ],
             ensure_ascii=False,
@@ -57,30 +57,30 @@ def test_resolve_asset_path_uses_background_library_with_chinese_hints(tmp_path:
         encoding="utf-8",
     )
 
-    resolved = resolve_asset_path("background", "bg.png", tmp_path, "案发书房", "听涛阁书房")
+    resolved = resolve_asset_path("background", "bg.png", tmp_path, "案发前厅", "听涛阁前厅")
 
-    assert resolved == study_path.resolve()
+    assert resolved == front_path.resolve()
 
 
 def test_resolve_asset_path_falls_back_to_default_background_library_entry(tmp_path: Path) -> None:
     background_dir = tmp_path / "backgrounds"
     background_dir.mkdir(parents=True)
-    default_path = background_dir / "rainy_villa_hall.png"
-    alt_path = background_dir / "gallery_inner_hall.png"
+    default_path = background_dir / "总.jpg"
+    alt_path = background_dir / "前厅.png"
     default_path.write_bytes(b"png")
     alt_path.write_bytes(b"png")
     (background_dir / "library.json").write_text(
         json.dumps(
             [
                 {
-                    "id": "rainy_villa_hall",
-                    "path": "backgrounds/rainy_villa_hall.png",
+                    "id": "总",
+                    "path": "backgrounds/总.jpg",
                     "aliases": ["default"],
                     "tags": ["default", "大厅"],
                 },
                 {
-                    "id": "gallery_inner_hall",
-                    "path": "backgrounds/gallery_inner_hall.png",
+                    "id": "前厅",
+                    "path": "backgrounds/前厅.png",
                     "aliases": ["展厅"],
                     "tags": ["室内", "展厅"],
                 },

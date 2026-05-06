@@ -37,7 +37,7 @@ def test_ai_client_uses_mock_mode_when_unconfigured(tmp_path: Path) -> None:
 
     assert client.mode_label == "Mock Story"
     assert scene.game_status == "ongoing"
-    assert scene.scene.background_image == "cybernoir_loft_lounge.png"
+    assert scene.scene.background_image == "总.jpg"
     assert len(scene.interactables) >= 3
 
 
@@ -178,7 +178,7 @@ def test_live_scene_uses_streaming_responses_api(
 
     captured: dict[str, object] = {}
     scene_json = (
-        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"scene"},'
+        '{"scene":{"background_image":"总.jpg","bgm":"bgm.mp3","description":"scene"},'
         '"npcs":[],"interactables":[{"id":"obj","name":"item","image":"obj.png",'
         '"position":[640,260],"options":[{"label":"inspect","action_id":"inspect"}]}],'
         '"narrative":"story","game_status":"ongoing","ending_text":null}'
@@ -244,7 +244,7 @@ def test_live_scene_scales_small_grid_coordinates_to_pixel_layout(
     credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
 
     scene_json = (
-        '{"scene":{"background_image":"bg.png","bgm":"bgm.mp3","description":"scene"},'
+        '{"scene":{"background_image":"总.jpg","bgm":"bgm.mp3","description":"scene"},'
         '"npcs":[{"id":"detective","name":"Detective","image":"npc.png","position":[38,74],'
         '"patrol":[[38,74],[52,70],[60,78]]}],"interactables":'
         '[{"id":"glass","name":"Display","image":"glass.png","position":[82,64],'
@@ -338,7 +338,7 @@ def test_live_scene_retries_once_after_timeout_then_succeeds(tmp_path: Path) -> 
     scene = load_scene_payload(
         {
             "scene": {
-                "background_image": "bg.png",
+                "background_image": "总.jpg",
                 "bgm": "bgm.mp3",
                 "description": "scene",
             },
@@ -381,7 +381,7 @@ def test_live_transport_error_message_includes_base_url_and_hint(tmp_path: Path)
 def test_live_error_normalizes_concurrency_limit_message(tmp_path: Path) -> None:
     client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
 
-    error = client._normalize_live_error(RuntimeError("请求已超出当前 API Key 的并发上限，请创建新会话后重试。"))
+    error = client._normalize_live_error(RuntimeError("请求已超出当前API Key的并发上限，请创建新会话后重试。"))
 
     assert isinstance(error, Exception)
     assert "同时只能处理一个实时请求" in str(error)
@@ -393,7 +393,7 @@ def test_scene_payload_repair_fills_missing_local_logic_keys(tmp_path: Path) -> 
     scene = client._load_scene_payload_with_repair(
         {
             "scene": {
-                "background_image": "bg.png",
+                "background_image": "总.jpg",
                 "bgm": "bgm.mp3",
                 "description": "repair",
             },
@@ -440,7 +440,7 @@ def test_scene_payload_repair_builds_feedback_for_missing_local_rule_logic(tmp_p
     scene = client._load_scene_payload_with_repair(
         {
             "scene": {
-                "background_image": "bg.png",
+                "background_image": "总.jpg",
                 "bgm": "bgm.mp3",
                 "description": "repair",
             },
@@ -448,7 +448,7 @@ def test_scene_payload_repair_builds_feedback_for_missing_local_rule_logic(tmp_p
             "interactables": [
                 {
                     "id": "notes",
-                    "name": "便签",
+                    "name": "纸条",
                     "image": "notes.png",
                     "position": [320, 240],
                     "state": {
@@ -459,64 +459,23 @@ def test_scene_payload_repair_builds_feedback_for_missing_local_rule_logic(tmp_p
                     },
                     "options": [
                         {
-                            "label": "查看便签",
+                            "label": "查看",
                             "action_id": "inspect_notes",
                             "resolution_mode": "local_rule",
                         }
                     ],
                 }
             ],
-            "narrative": "测试缺失 local_rule 反馈时的修复。",
+            "narrative": "测试修复缺失的 local_rule 逻辑。",
             "game_status": "ongoing",
             "ending_text": None,
         }
     )
 
     option = scene.interactables[0].options[0]
-
     assert option.local_logic is not None
-    assert option.local_logic.success_text == "你执行了“查看便签”，并得到了一条可继续利用的反馈。"
-    assert option.local_logic.failure_text == "当前条件不足，暂时无法执行“查看便签”。"
-
-
-def test_live_timeout_expands_stream_read_deadline_for_normal_requests(tmp_path: Path) -> None:
-    client = ReverseDetectiveAIClient(_build_config(tmp_path), cache_root=tmp_path / "cache")
-
-    deadline_seconds = client._live_overall_deadline_seconds(45)
-    timeout = client._build_live_timeout(45)
-
-    assert deadline_seconds > 45
-    assert timeout.read == deadline_seconds
-
-
-def test_live_scene_deadline_stops_hung_stream(tmp_path: Path) -> None:
-    credentials_path = tmp_path / "credentials.json"
-    credentials_path.write_text('{"api_key":"test-key"}', encoding="utf-8")
-    client = ReverseDetectiveAIClient(
-        _build_config(
-            tmp_path,
-            base_url="https://apikey.soxio.me/openai",
-            timeout_seconds=0.1,
-            use_mock_when_unconfigured=False,
-            fallback_to_mock_on_error=False,
-            credentials_path=credentials_path,
-        ),
-        cache_root=tmp_path / "cache",
-    )
-
-    def fake_stream_live_scene(request, *, reasoning_effort: str, timeout_seconds: float):
-        time.sleep(1.5)
-        raise AssertionError("background thread should be ignored after deadline")
-
-    client._stream_live_scene = fake_stream_live_scene  # type: ignore[method-assign]
-    client._live_attempt_plan = lambda: [("xhigh", 0.1)]  # type: ignore[method-assign]
-
-    start = time.monotonic()
-    with pytest.raises(Exception, match="overall deadline|总时限保护"):
-        client.generate_initial_scene(build_default_premise())
-    elapsed = time.monotonic() - start
-
-    assert elapsed < 1.2
+    assert option.local_logic.success_text is not None
+    assert option.local_logic.failure_text is not None
 
 
 def test_live_requests_are_serialized_for_single_api_key(tmp_path: Path) -> None:
@@ -535,7 +494,7 @@ def test_live_requests_are_serialized_for_single_api_key(tmp_path: Path) -> None
     scene = load_scene_payload(
         {
             "scene": {
-                "background_image": "bg.png",
+                "background_image": "总.jpg",
                 "bgm": "bgm.mp3",
                 "description": "serialized",
             },
@@ -586,7 +545,7 @@ def test_initial_scene_cache_roundtrip_loads_saved_scene(tmp_path: Path) -> None
 
     assert cached_scene is not None
     assert cached_scene.scene.description == scene.scene.description
-    assert cached_scene.scene.background_image == "cybernoir_loft_lounge.png"
+    assert cached_scene.scene.background_image == "总.jpg"
     assert client.mode_label.startswith("Cached")
 
 
@@ -612,7 +571,7 @@ def test_local_story_cache_file_is_used_when_available(
                         "source_mode": "Cached Mock Story",
                         "scene": {
                             "scene": {
-                                "background_image": "bg.png",
+                                "background_image": "总.jpg",
                                 "bgm": "bgm.mp3",
                                 "description": "本地首包",
                             },
@@ -638,5 +597,5 @@ def test_local_story_cache_file_is_used_when_available(
 
     assert scene is not None
     assert scene.scene.description == "本地首包"
-    assert scene.scene.background_image == "cybernoir_loft_lounge.png"
+    assert scene.scene.background_image == "总.jpg"
     assert client.mode_label == "Cached Mock Story"

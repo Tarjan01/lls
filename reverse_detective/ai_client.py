@@ -17,6 +17,7 @@ from reverse_detective.config import AIConfig
 from reverse_detective.game_state import PendingChoice
 from reverse_detective.models import ActionRecord, SceneState, StoryPremise
 from reverse_detective.scene_loader import load_scene_payload, scene_to_dict
+from reverse_detective.utils.assets import SCENE_BACKGROUND_DEFAULT, normalize_scene_background_ref
 from reverse_detective.story_loader import (
     DEFAULT_STORIES_DIR,
     STORY_CACHE_FILE_NAME,
@@ -27,7 +28,7 @@ from reverse_detective.story_loader import (
 
 PROMPT_SCHEMA = {
     "scene": {
-        "background_image": "mansion_study_room.png",
+        "background_image": "总.jpg",
         "bgm": "crime_suspense_medium",
         "description": "string",
         "bgm_tension": "medium",
@@ -103,7 +104,7 @@ DEFAULT_INITIAL_SCENE_CACHE_ROOT = Path("~/.reverse_detective/cache/initial_scen
 SHORT_TIMEOUT_OVERALL_BUFFER_SECONDS = 0.5
 STREAM_DEADLINE_MIN_BUFFER_SECONDS = 20.0
 STREAM_DEADLINE_BUFFER_MULTIPLIER = 1.25
-DEFAULT_INITIAL_BACKGROUND_IMAGE = "cybernoir_loft_lounge.png"
+DEFAULT_INITIAL_BACKGROUND_IMAGE = SCENE_BACKGROUND_DEFAULT
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,11 +200,12 @@ class ReverseDetectiveAIClient:
         return self._apply_initial_scene_background(scene)
 
     def _apply_initial_scene_background(self, scene: SceneState) -> SceneState:
-        if scene.scene.background_image == DEFAULT_INITIAL_BACKGROUND_IMAGE:
-            return scene
-
         payload = scene_to_dict(scene)
-        payload["scene"]["background_image"] = DEFAULT_INITIAL_BACKGROUND_IMAGE
+        payload["scene"]["background_image"] = self._normalize_scene_background(
+            payload["scene"].get("background_image", DEFAULT_INITIAL_BACKGROUND_IMAGE),
+            payload["scene"].get("description", ""),
+            scene.narrative,
+        )
         return load_scene_payload(payload)
 
     def prefetch_initial_scene(self, premise: StoryPremise, *, force: bool = False) -> bool:
@@ -517,10 +519,10 @@ class ReverseDetectiveAIClient:
             f"17. Keep most x coordinates within {LIVE_WORLD_X_RANGE[0]}-{LIVE_WORLD_X_RANGE[1]} and most y coordinates within {LIVE_WORLD_Y_RANGE[0]}-{LIVE_WORLD_Y_RANGE[1]}.\n"
             "18. Every patrol must be null or an array of at least two coordinate arrays like [[x, y], [x, y]]. Never use coordinate objects.\n"
             "19. When a scene has multiple NPCs or interactables, spread them across left, center, and right areas instead of clustering them in one corner.\n"
-            "20. background_image and every image field must be descriptive local asset hints ending in .png. Use short lowercase ASCII names such as rainy_villa_hall.png, detective.png, or tool_case.png.\n"
-            "21. The bundled art library is 2.5D and stage-like: side-view or front-view rooms, upright characters, and front/side props with clear flat silhouettes.\n"
-            "22. Never imply top-down, overhead, bird's-eye, minimap, tactical-grid, or isometric map art. Asset hints must fit the local side/front-view library.\n"
-            "23. Prefer asset hints close to the bundled library, such as rainy_villa_hall.png, rainy_villa_ending.png, front_gallery.png, cybernoir_control_desk.png, cybernoir_loft_lounge.png, mansion_foyer_night.png, detective.png, victim.png, witness.png, security_guard.png, tool_case.png, support_kit.png, guest_register.png, sealed_letter.png, brass_key.png, safe_box_closed.png, locked_door.png, open_door.png, or window.png.\n"
+            "20. background_image must be one of the bundled scene backgrounds in assets/h_ass. Prefer 总.jpg for the mansion overview and the room images 前厅.png, 书房.jpg, 茶水间.png, 医务室.png, 杂物间.png, 主卧.png, 少爷卧室.png, 苏曼客房.png, or 阁楼.png.\n"
+            "21. Other image fields remain local asset hints, but background_image is restricted to the h_ass scene set.\n"
+            "22. Do not invent exterior, futuristic, or unrelated background art. The playable mansion must stay inside the bundled house layout.\n"
+            "23. Match the current location with the corresponding h_ass image whenever possible. If the scene is still the house overview, use 总.jpg.\n"
             "24. Do not return remote URLs, base64, or binary payloads. The client maps asset hints to a local image library.\n"
             f"25. scene.bgm must be a local music cue id, not a filename or URL. Prefer one of {', '.join(SUPPORTED_BGM_CUES)}.\n"
             "26. scene.bgm_tension must be one of low, medium, high, critical and should reflect suspense intensity.\n"
@@ -567,10 +569,9 @@ class ReverseDetectiveAIClient:
                     "Do not cluster every entity into the top-left corner or a tiny area."
                 ),
                 "asset_hint_rule": (
-                    "background_image and every image field are local asset hints, not URLs. "
-                    "Keep them short, lowercase, descriptive, ASCII-only, and ending in .png. "
-                    "Prefer the bundled 2.5D side/front-view library with upright characters and front/side props. "
-                    "Never imply top-down, overhead, bird's-eye, or isometric art."
+                    "background_image must resolve to one of the bundled h_ass mansion scene images. "
+                    "Prefer 总.jpg for the overview and the room image matching the current location. "
+                    "Other image fields remain local asset hints, not URLs."
                 ),
             },
             "audio_guidance": {
@@ -673,10 +674,12 @@ class ReverseDetectiveAIClient:
 
     def _load_scene_payload_with_repair(self, payload: str | dict[str, Any]) -> SceneState:
         try:
-            return self._normalize_scene_layout(load_scene_payload(payload))
+            return self._normalize_scene_layout(self._normalize_scene_background_in_scene(load_scene_payload(payload)))
         except Exception:
             repaired_payload = self._repair_scene_payload_schema(payload)
-            return self._normalize_scene_layout(load_scene_payload(repaired_payload))
+            return self._normalize_scene_layout(
+                self._normalize_scene_background_in_scene(load_scene_payload(repaired_payload))
+            )
 
     def _repair_scene_payload_schema(self, payload: str | dict[str, Any]) -> dict[str, Any]:
         if isinstance(payload, str):
@@ -989,12 +992,26 @@ class ReverseDetectiveAIClient:
         except Exception:
             return None
 
+        scene = self._normalize_scene_background_in_scene(scene)
+
         source_label = payload.get("source_mode")
         if isinstance(source_label, str) and source_label.strip():
             self._last_mode_label = source_label.strip()
         else:
             self._last_mode_label = "Cached Live API" if self._live_enabled else "Cached Mock Story"
         return scene
+
+    def _normalize_scene_background_in_scene(self, scene: SceneState) -> SceneState:
+        payload = scene_to_dict(scene)
+        payload["scene"]["background_image"] = self._normalize_scene_background(
+            payload["scene"].get("background_image", DEFAULT_INITIAL_BACKGROUND_IMAGE),
+            payload["scene"].get("description", ""),
+            scene.narrative,
+        )
+        return load_scene_payload(payload)
+
+    def _normalize_scene_background(self, asset_ref: str, *hint_texts: str) -> str:
+        return normalize_scene_background_ref(asset_ref, *hint_texts)
 
 
 def build_default_premise() -> StoryPremise:
@@ -1139,7 +1156,7 @@ class _MockStoryEngine:
         scene_payload = scene_to_dict(request.current_scene)
         inside_room = "open_door" in action_ids
         scene_payload["scene"]["background_image"] = (
-            "mansion_study_room.png" if inside_room else "rainy_villa_hall.png"
+            "书房.jpg" if inside_room else "总.jpg"
         )
         scene_payload["scene"]["bgm"] = "crime_suspense_high" if inside_room else "crime_suspense_medium"
         scene_payload["scene"]["bgm_tension"] = "high" if inside_room else "medium"
@@ -1156,7 +1173,7 @@ class _MockStoryEngine:
     def _initial_scene(self, premise: StoryPremise) -> dict[str, Any]:
         return {
             "scene": {
-                "background_image": "rainy_villa_hall.png",
+                "background_image": "总.jpg",
                 "bgm": "crime_suspense_medium",
                 "description": f"{premise.story_title} · 当前行动阶段",
                 "bgm_tension": "medium",
@@ -1373,7 +1390,7 @@ class _MockStoryEngine:
     def _alibi_scene(self, premise: StoryPremise) -> dict[str, Any]:
         return {
             "scene": {
-                "background_image": "front_gallery.png",
+                "background_image": "前厅.png",
                 "bgm": "crime_suspense_low",
                 "description": f"{premise.story_title} · 前厅假象",
                 "bgm_tension": "low",
@@ -1462,7 +1479,7 @@ class _MockStoryEngine:
     ) -> dict[str, Any]:
         return {
             "scene": {
-                "background_image": "rainy_villa_ending.png",
+                "background_image": "总.jpg",
                 "bgm": "ending_resolve",
                 "description": f"{premise.story_title} · 结局",
                 "bgm_tension": "critical" if game_status == "player_lose" else "high",
