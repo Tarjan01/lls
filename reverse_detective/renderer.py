@@ -441,18 +441,6 @@ class Renderer(TooltipMixin):
                 return target.action
         return None
 
-    def consume_main_menu_action(self, position: tuple[int, int]) -> str | None:
-        for target in reversed(self._main_menu_targets):
-            if target.rect.collidepoint(position):
-                return target.action
-        return None
-
-    def consume_profile_setup_action(self, position: tuple[int, int]) -> str | None:
-        for target in reversed(self._profile_setup_targets):
-            if target.rect.collidepoint(position):
-                return target.action
-        return None
-
     def select_hud_sidebar_section(self, index: int) -> bool:
         if not self._hud_sidebar_targets:
             return False
@@ -1917,6 +1905,18 @@ class MenuRenderer(TooltipMixin):
         )
         self._draw_tooltip_overlay()
         pygame.display.flip()
+
+    def consume_main_menu_action(self, position: tuple[int, int]) -> str | None:
+        for target in reversed(self._main_menu_targets):
+            if target.rect.collidepoint(position):
+                return target.action
+        return None
+
+    def consume_profile_setup_action(self, position: tuple[int, int]) -> str | None:
+        for target in reversed(self._profile_setup_targets):
+            if target.rect.collidepoint(position):
+                return target.action
+        return None
 
     def draw_story_browser(
         self,
