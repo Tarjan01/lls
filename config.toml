@@ -17,4 +17,4 @@ credentials_path = "C:\\Users\\74311\\.reverse_detective\\credentials.json"
 
 [player]
 detective_name = "蒋轩"
-avatar_gender = "female"
+avatar_gender = "male"
