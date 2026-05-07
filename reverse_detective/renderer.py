@@ -929,7 +929,7 @@ class Renderer(TooltipMixin):
                 fill = (232, 194, 126, 62) if selected and panel_focus == "options" else (255, 255, 255, 12)
                 border = (247, 224, 164) if selected and panel_focus == "options" else (112, 126, 143)
                 self._register_action_target(slot_rect, f"choose_option:{actual_index}")
-                resolution_label = "鍗虫椂AI" if option.resolution_mode == "immediate_ai" else "鏈湴瑙勫垯"
+                resolution_label = "即时AI" if option.resolution_mode == "immediate_ai" else "本地规则"
                 text_color = (248, 240, 229) if selected else (231, 235, 241)
                 note_color = (244, 215, 157) if selected else (179, 188, 199)
                 label = option.label
@@ -939,8 +939,8 @@ class Renderer(TooltipMixin):
                 border = (83, 93, 106)
                 text_color = (154, 164, 176)
                 note_color = (125, 135, 146)
-                label = "绌轰綅"
-                note = "绛夊緟闈犺繎"
+                label = "空位"
+                note = "等待靠近"
 
             slot_overlay = pygame.Surface(slot_rect.size, pygame.SRCALPHA)
             slot_overlay.fill(fill)
@@ -1000,9 +1000,9 @@ class Renderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "鍥炶溅纭杈撳叆 | Ctrl+V 绮樿创 | Esc 鍙栨秷"
+            "回车确认输入 | Ctrl+V 粘贴 | Esc 取消"
             if not multiline
-            else "鍥炶溅鎹㈣ | Ctrl+V 绮樿创 | Ctrl+Enter 纭 | Esc 鍙栨秷",
+            else "回车换行 | Ctrl+V 粘贴 | Ctrl+Enter 确认 | Esc 取消",
             (rect.x + 24, rect.y + 56),
             (220, 223, 232),
             rect.width - 48,
@@ -1014,7 +1014,7 @@ class Renderer(TooltipMixin):
             pygame.draw.rect(self._surface, (235, 202, 140), composition_rect, width=1, border_radius=8)
             self._blit_clamped_line(
                 self._small_font,
-                f"杈撳叆娉曞€欓€? {composition}",
+                f"输入法候选: {composition}",
                 (composition_rect.x + 10, composition_rect.y + 2),
                 (247, 233, 204),
                 composition_rect.width - 20,
@@ -1635,10 +1635,10 @@ class MenuRenderer(TooltipMixin):
 
     def _main_menu_button_rects(self) -> tuple[pygame.Rect, ...]:
         return (
-            self._scale_menu_rect((904, 439, 520, 128)),
-            self._scale_menu_rect((904, 592, 520, 128)),
-            self._scale_menu_rect((904, 745, 520, 128)),
-            self._scale_menu_rect((904, 899, 520, 128)),
+            self._scale_menu_rect((918, 492, 442, 100)),
+            self._scale_menu_rect((918, 640, 442, 100)),
+            self._scale_menu_rect((918, 795, 442, 101)),
+            self._scale_menu_rect((918, 949, 442, 104)),
         )
 
     def _profile_setup_input_rect(self) -> pygame.Rect:
@@ -1719,7 +1719,7 @@ class MenuRenderer(TooltipMixin):
             cursor = min(max(input_cursor, 0), len(display_value))
             display_value = f"{display_value[:cursor]}|{display_value[cursor:]}" if display_value else "|"
         elif not display_value:
-            display_value = current_name or "璇风偣鍑昏緭鍏ユ"
+            display_value = current_name or "请点击输入框"
 
         self._blit_clamped_line(
             self._body_font,
@@ -1731,7 +1731,7 @@ class MenuRenderer(TooltipMixin):
         if input_composition:
             self._blit_clamped_line(
                 self._small_font,
-                f"杈撳叆娉曞€欓€? {input_composition}",
+                f"输入法候选: {input_composition}",
                 (input_rect.x + 18, input_rect.bottom + 8),
                 (230, 210, 167),
                 input_rect.width - 36,
@@ -1781,7 +1781,7 @@ class MenuRenderer(TooltipMixin):
         pygame.draw.rect(self._surface, (247, 222, 154), start_rect, width=2, border_radius=10)
         self._blit_clamped_line(
             self._title_font,
-            "????",
+            "开始游戏",
             start_rect.center,
             (245, 233, 219),
             start_rect.width - 32,
@@ -1869,7 +1869,7 @@ class MenuRenderer(TooltipMixin):
                     if len(args) > 3:
                         status_text = args[3]
 
-        option_labels = options or ["????", "????", "??", "????"]
+        option_labels = options or ["开始游戏", "自定义剧本", "选项设置", "退出游戏"]
         self._draw_main_menu_art_overlay(option_labels, selected_index, status_text)
         self._draw_tooltip_overlay()
         pygame.display.flip()
@@ -1937,7 +1937,7 @@ class MenuRenderer(TooltipMixin):
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
-        self._draw_chrome(background.game_title, "鍗峰畻閫夋嫨", background.operator_name)
+        self._draw_chrome(background.game_title, "卷宗选择", background.operator_name)
 
         content_rect = self._menu_content_rect()
         left, right = self._split_menu_columns(
@@ -1951,15 +1951,15 @@ class MenuRenderer(TooltipMixin):
         self._panel(left, (17, 22, 28))
         self._panel(right, (25, 21, 18))
 
-        self._section_title(f"鍗峰畻 {story_index + 1}/{story_count}", left.x + 22, left.y + 18)
+        self._section_title(f"卷宗 {story_index + 1}/{story_count}", left.x + 22, left.y + 18)
         self._draw_summary_card(
             rect=pygame.Rect(left.x + 20, left.y + 58, left.width - 40, 412),
             title=story.title,
             subtitle=story.subtitle,
             accent=(225, 196, 131),
             body_blocks=[
-                f"鍦扮偣: {story.location}",
-                f"姝昏€? {story.victim_name}",
+                f"地点: {story.location}",
+                f"死者: {story.victim_name}",
                 story.core_case,
                 story.opening_hook,
             ],
@@ -1968,14 +1968,14 @@ class MenuRenderer(TooltipMixin):
         ranking_text = " | ".join(rank.rank for rank in story.rankings[:4])
         self._blit_clamped_line(
             self._small_font,
-            f"璇勭骇: {ranking_text}",
+            f"评级: {ranking_text}",
             (left.x + 24, left.bottom - 40),
             (203, 210, 220),
             left.width - 48,
             selected=focus == "story",
         )
 
-        self._section_title("????", right.x + 22, right.y + 18)
+        self._section_title("角色概览", right.x + 22, right.y + 18)
         self._draw_summary_card(
             rect=pygame.Rect(right.x + 20, right.y + 58, right.width - 40, 266),
             title=role.display_name,
@@ -1983,14 +1983,14 @@ class MenuRenderer(TooltipMixin):
             accent=(226, 177, 139),
             body_blocks=[
                 role.background,
-                f"鍔ㄦ満: {role.motive}",
-                f"闅愯棌鐩爣: {role.hidden_objective}",
+                f"动机: {role.motive}",
+                f"隐藏目标: {role.hidden_objective}",
             ],
             focused=focus == "role",
         )
         self._draw_role_strip(story.roles, role, right.x + 20, right.y + 344, right.width - 40)
 
-        footer = "鍗峰畻椤垫帶鍒? 宸﹀彸鎹㈠嵎瀹?| 涓婁笅鎹㈣韩浠?| Tab 鍒囨崲鐒︾偣 | Enter 鏌ョ湅璇︽儏 | Space 寮€濮嬫浠?| Backspace 杩斿洖"
+        footer = "卷宗页控制: 左右切换卷宗 | 上下切换角色 | Tab 切换焦点 | Enter 查看详情 | Space 开始案件 | Backspace 返回"
         self._draw_footer(footer, None)
         if detail_modal is not None:
             self._draw_detail_modal(detail_modal)
@@ -2021,16 +2021,16 @@ class MenuRenderer(TooltipMixin):
             operator_portrait_name=operator_portrait_name,
             operator_portrait_gender=operator_portrait_gender,
         )
-        self._draw_chrome(background.game_title, "閫夐」璁剧疆", background.operator_name)
+        self._draw_chrome(background.game_title, "选项设置", background.operator_name)
 
         content_rect = self._menu_content_rect()
         panel = pygame.Rect(content_rect.x, 126, content_rect.width, 520)
         self._panel(panel, (16, 21, 28))
-        self._section_title("AI ??", panel.x + 24, panel.y + 18)
+        self._section_title("运行与 AI 请求设置", panel.x + 24, panel.y + 18)
 
         self._blit_clamped_line(
             self._small_font,
-            "?? AI ?????????????? Enter ???????",
+            "包含 AI 请求地址、API Key、模型、回退策略以及基础显示设置。选中后按 Enter 编辑，布尔项可直接切换。",
             (panel.x + 24, panel.y + 58),
             (219, 224, 231),
             panel.width - 48,
@@ -2080,11 +2080,11 @@ class MenuRenderer(TooltipMixin):
             )
 
         tips = [
-            "蹇呰璁剧疆:",
-            "1. 璇锋眰 URL / Base URL",
+            "必要设置:",
+            "1. 请求 URL / Base URL",
             "2. API Key",
-            "3. 妯″瀷鍚嶄笌鍥為€€绛栫暐",
-            "4. Tab ??????",
+            "3. 模型名与回退策略",
+            "4. Tab 切换字段",
         ]
         self._blit_clamped_lines(
             tips,
@@ -2094,7 +2094,7 @@ class MenuRenderer(TooltipMixin):
             panel.width - 48,
             line_gap=5,
         )
-        footer = "璁剧疆椤垫帶鍒? 涓婁笅鍒囨崲 | Enter 缂栬緫/鍒囨崲 | 宸﹀彸鍒囨崲甯冨皵鍊?| S 淇濆瓨 | D 鏀惧純淇敼 | Backspace 杩斿洖"
+        footer = "设置页控制: 上下切换 | Enter 编辑/切换 | 左右切换布尔值 | S 保存 | D 放弃修改 | Backspace 返回"
         self._draw_footer(footer, status_text)
 
         if editing_field is not None:
@@ -2809,9 +2809,9 @@ class MenuRenderer(TooltipMixin):
         )
         self._blit_clamped_line(
             self._small_font,
-            "鍥炶溅纭杈撳叆 | Ctrl+V 绮樿创 | Esc 鍙栨秷"
+            "回车确认输入 | Ctrl+V 粘贴 | Esc 取消"
             if not multiline
-            else "鍥炶溅鎹㈣ | Ctrl+V 绮樿创 | Ctrl+Enter 纭 | Esc 鍙栨秷",
+            else "回车换行 | Ctrl+V 粘贴 | Ctrl+Enter 确认 | Esc 取消",
             (rect.x + 24, rect.y + 56),
             (220, 223, 232),
             rect.width - 48,
@@ -2823,7 +2823,7 @@ class MenuRenderer(TooltipMixin):
             pygame.draw.rect(self._surface, (235, 202, 140), composition_rect, width=1, border_radius=8)
             self._blit_clamped_line(
                 self._small_font,
-                f"杈撳叆娉曞€欓€? {composition}",
+                f"输入法候选: {composition}",
                 (composition_rect.x + 10, composition_rect.y + 2),
                 (247, 233, 204),
                 composition_rect.width - 20,
@@ -2931,25 +2931,25 @@ class MenuRenderer(TooltipMixin):
     def _format_setting_value(self, field_name: str, field_kind: str, draft: Any) -> str:
         value = getattr(draft, field_name)
         if field_kind == "bool":
-            return "?" if value else "?"
+            return "是" if value else "否"
         if field_name == "avatar_gender":
-            return "?" if str(value).strip().lower() == "male" else "?"
+            return "男" if str(value).strip().lower() == "male" else "女"
         if field_name == "api_key":
             return self._mask_secret(str(value))
-        return str(value) or "(绌?"
+        return str(value) or "(空)"
 
     def _main_menu_hint(self, option: str) -> str:
         hints = {
-            "????": "?????????",
-            "????": "??????????????",
-            "??": "?? AI ??????",
-            "????": "?????",
+            "开始游戏": "进入角色创建并开始新案件。",
+            "自定义剧本": "进入自定义剧本编辑器。",
+            "选项设置": "调整显示和 AI 请求配置。",
+            "退出游戏": "关闭游戏。",
         }
         return hints.get(option, "")
 
     def _mask_secret(self, value: str) -> str:
         if not value:
-            return "(鏈缃?"
+            return "(未设置)"
         if len(value) <= 8:
             return "*" * len(value)
         return f"{value[:4]}...{value[-4:]}"
